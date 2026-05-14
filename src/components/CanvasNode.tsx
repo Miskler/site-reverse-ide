@@ -7,7 +7,9 @@ export interface CanvasNodeData extends Record<string, unknown> {
   color: string;
   connectMode: boolean;
   linkCount: number;
-  onDelete: (nodeId: string) => void;
+  onRequestDelete: (nodeId: string) => void;
+  onOpenEditor: (nodeId: string) => void;
+  onOpenColorPicker: (nodeId: string) => void;
 }
 
 export type CanvasNodeType = Node<CanvasNodeData, 'canvasNode'>;
@@ -20,7 +22,28 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
     <article
       className={`graph-node${selected ? ' is-selected' : ''}`}
       style={{ '--node-color': data.color } as CSSProperties}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        data.onOpenEditor(id);
+      }}
     >
+      <button
+        type="button"
+        className="graph-node__color-strip nodrag nopan"
+        aria-label={`Изменить цвет блока ${title}`}
+        title="Изменить цвет"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          data.onOpenColorPicker(id);
+        }}
+        onDoubleClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      />
+
       <Handle
         type="target"
         id="target"
@@ -28,29 +51,38 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
         className={`graph-node__handle${data.connectMode ? ' is-visible' : ''}`}
         isConnectable={data.connectMode}
       />
+
       <div className="graph-node__chrome">
         <span className="graph-node__tag">Блок</span>
         <button
           type="button"
-          className="graph-node__delete"
+          className="graph-node__delete nodrag nopan"
           aria-label={`Удалить блок ${title}`}
+          title="Удалить блок"
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            data.onDelete(id);
+            data.onRequestDelete(id);
+          }}
+          onDoubleClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
           }}
         >
           ×
         </button>
       </div>
+
       <div className="graph-node__body">
         <h3>{title}</h3>
         <p>{note}</p>
       </div>
+
       <footer className="graph-node__footer">
-        <span>{data.connectMode ? 'Тяни за маркер для связи' : 'Перетащи для движения'}</span>
+        <span>{data.connectMode ? 'Тяни за маркер для связи' : 'Перетаскивай для движения'}</span>
         <span>{data.linkCount} связ.</span>
       </footer>
+
       <Handle
         type="source"
         id="source"

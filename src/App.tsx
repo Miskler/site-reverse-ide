@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useId,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -8,7 +18,6 @@ import {
   useNodesState,
   type Connection,
   type Edge,
-  type Node,
   type ReactFlowInstance,
 } from '@xyflow/react';
 import {
@@ -24,11 +33,31 @@ import {
   type GraphNode,
 } from './shared/graph';
 import { CanvasEdge } from './components/CanvasEdge';
-import { CanvasNode, type CanvasNodeData, type CanvasNodeType } from './components/CanvasNode';
+import { CanvasNode, type CanvasNodeType } from './components/CanvasNode';
 
 type StatusTone = 'neutral' | 'success' | 'warning';
 
 type FlowEdge = Edge;
+
+type DialogState =
+  | {
+      kind: 'details';
+      nodeId: string;
+      title: string;
+      note: string;
+    }
+  | {
+      kind: 'color';
+      nodeId: string;
+      color: string;
+    }
+  | {
+      kind: 'confirm-delete';
+      target: 'node' | 'edge';
+      id: string;
+      label: string;
+    }
+  | null;
 
 const nodeTypes = {
   canvasNode: CanvasNode,
@@ -81,17 +110,13 @@ export function App() {
   const [statusTone, setStatusTone] = useState<StatusTone>('neutral');
   const [hydrated, setHydrated] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<CanvasNodeType, FlowEdge> | null>(null);
+  const [dialog, setDialog] = useState<DialogState>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const statusTimerRef = useRef<number | null>(null);
   const fittedRef = useRef(false);
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
-  const deleteNodeRef = useRef<(nodeId: string) => void>(() => undefined);
-  const deleteNodeProxyRef = useRef<(nodeId: string) => void>((nodeId: string) => {
-    deleteNodeRef.current(nodeId);
-  });
-  const deleteNodeProxy = deleteNodeProxyRef.current;
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -100,10 +125,6 @@ export function App() {
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
-
-  useEffect(() => {
-    deleteNodeRef.current = handleDeleteNode;
-  });
 
   useEffect(() => {
     void loadInitialGraph();
@@ -128,6 +149,42 @@ export function App() {
       setSelectedEdgeId(null);
     }
   }, [edges, selectedEdgeId]);
+
+  useEffect(() => {
+    if (!dialog) {
+      return;
+    }
+
+    if (dialog.kind === 'details' || dialog.kind === 'color') {
+      if (!nodes.some((node) => node.id === dialog.nodeId)) {
+        setDialog(null);
+      }
+      return;
+    }
+
+    const exists = dialog.target === 'node'
+      ? nodes.some((node) => node.id === dialog.id)
+      : edges.some((edge) => edge.id === dialog.id);
+
+    if (!exists) {
+      setDialog(null);
+    }
+  }, [dialog, edges, nodes]);
+
+  useEffect(() => {
+    if (!dialog) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDialog(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dialog]);
 
   useEffect(() => {
     if (!hydrated || fittedRef.current || !reactFlowInstance || nodes.length === 0) {
@@ -240,7 +297,9 @@ export function App() {
         color: node.color,
         connectMode,
         linkCount: linkCounts.get(node.id) ?? 0,
-        onDelete: deleteNodeProxy,
+        onRequestDelete: requestDeleteNode,
+        onOpenEditor: requestOpenNodeDetails,
+        onOpenColorPicker: requestOpenNodeColor,
       },
       draggable: true,
       selectable: true,
@@ -319,7 +378,9 @@ export function App() {
         color: pickNodeColor(index),
         connectMode,
         linkCount: 0,
-        onDelete: deleteNodeProxy,
+        onRequestDelete: requestDeleteNode,
+        onOpenEditor: requestOpenNodeDetails,
+        onOpenColorPicker: requestOpenNodeColor,
       },
       draggable: true,
       selectable: true,
@@ -437,14 +498,95 @@ export function App() {
     scheduleSave(nodesRef.current, nextEdges, 'Связь удалена');
   }
 
-  function deleteSelection() {
+  const requestOpenNodeDetails = useCallback((nodeId: string) => {
+    const node = nodesRef.current.find((current) => current.id === nodeId);
+    if (!node) {
+      return;
+    }
+
+    setSelectedNodeId(nodeId);
+    setSelectedEdgeId(null);
+    setDialog({
+      kind: 'details',
+      nodeId,
+      title: node.data.title,
+      note: node.data.note,
+    });
+  }, []);
+
+  const requestOpenNodeColor = useCallback((nodeId: string) => {
+    const node = nodesRef.current.find((current) => current.id === nodeId);
+    if (!node) {
+      return;
+    }
+
+    setSelectedNodeId(nodeId);
+    setSelectedEdgeId(null);
+    setDialog({
+      kind: 'color',
+      nodeId,
+      color: node.data.color,
+    });
+  }, []);
+
+  const requestDeleteNode = useCallback((nodeId: string) => {
+    const node = nodesRef.current.find((current) => current.id === nodeId);
+    if (!node) {
+      return;
+    }
+
+    setSelectedNodeId(nodeId);
+    setSelectedEdgeId(null);
+    setDialog({
+      kind: 'confirm-delete',
+      target: 'node',
+      id: nodeId,
+      label: node.data.title.trim() || 'Без названия',
+    });
+  }, []);
+
+  const requestDeleteEdge = useCallback((edgeId: string) => {
+    const edge = edgesRef.current.find((current) => current.id === edgeId);
+    if (!edge) {
+      return;
+    }
+
+    setSelectedEdgeId(edgeId);
+    setSelectedNodeId(null);
+    setDialog({
+      kind: 'confirm-delete',
+      target: 'edge',
+      id: edgeId,
+      label: formatEdgeLabel(nodesRef.current, edge),
+    });
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (!dialog || dialog.kind !== 'confirm-delete') {
+      return;
+    }
+
+    if (dialog.target === 'node') {
+      handleDeleteNode(dialog.id);
+    } else {
+      handleDeleteEdge(dialog.id);
+    }
+
+    setDialog(null);
+  }, [dialog]);
+
+  const closeDialog = useCallback(() => {
+    setDialog(null);
+  }, []);
+
+  function requestDeleteSelection() {
     if (selectedNodeId) {
-      handleDeleteNode(selectedNodeId);
+      requestDeleteNode(selectedNodeId);
       return;
     }
 
     if (selectedEdgeId) {
-      handleDeleteEdge(selectedEdgeId);
+      requestDeleteEdge(selectedEdgeId);
       return;
     }
 
@@ -467,16 +609,6 @@ export function App() {
     setStatus('Demo восстановлен');
   }
 
-  function selectNode(nodeId: string) {
-    setSelectedNodeId(nodeId);
-    setSelectedEdgeId(null);
-  }
-
-  function selectEdge(edgeId: string) {
-    setSelectedEdgeId(edgeId);
-    setSelectedNodeId(null);
-  }
-
   function handleSelectionChange({
     nodes: selectedNodes,
     edges: selectedEdges,
@@ -488,13 +620,9 @@ export function App() {
     setSelectedEdgeId(selectedEdges[0]?.id ?? null);
   }
 
-  function updateSelectedNode(patch: Partial<Pick<GraphNode, 'title' | 'note' | 'color'>>) {
-    if (!selectedNodeId) {
-      return;
-    }
-
+  function updateNodeById(nodeId: string, patch: Partial<Pick<GraphNode, 'title' | 'note' | 'color'>>) {
     const nextNodes = nodesRef.current.map((node) => {
-      if (node.id !== selectedNodeId) {
+      if (node.id !== nodeId) {
         return node;
       }
 
@@ -511,18 +639,6 @@ export function App() {
 
     setNodes(nextNodes);
     scheduleSave(nextNodes, edgesRef.current, 'Параметры блока обновлены');
-  }
-
-  function updateSelectedNodeTitle(value: string) {
-    updateSelectedNode({ title: value });
-  }
-
-  function updateSelectedNodeNote(value: string) {
-    updateSelectedNode({ note: value });
-  }
-
-  function updateSelectedNodeColor(value: string) {
-    updateSelectedNode({ color: value });
   }
 
   const linkCounts = useMemo(() => {
@@ -544,173 +660,58 @@ export function App() {
           ...node.data,
           connectMode,
           linkCount: linkCounts.get(node.id) ?? 0,
-          onDelete: deleteNodeProxy,
+          onRequestDelete: requestDeleteNode,
+          onOpenEditor: requestOpenNodeDetails,
+          onOpenColorPicker: requestOpenNodeColor,
         },
       })),
-    [connectMode, deleteNodeProxy, linkCounts, nodes],
+    [connectMode, linkCounts, nodes, requestDeleteNode, requestOpenNodeColor, requestOpenNodeDetails],
   );
 
   const flowEdges: FlowEdge[] = useMemo(() => edges.map((edge) => ({ ...edge })), [edges]);
 
-  const selectedNode = useMemo(
-    () => (selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null),
-    [nodes, selectedNodeId],
-  );
-  const selectedEdge = useMemo(
-    () => (selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId) ?? null : null),
-    [edges, selectedEdgeId],
-  );
-
-  const connectedNodes = useMemo(
-    () => nodes.filter((node) => (linkCounts.get(node.id) ?? 0) > 0).length,
-    [linkCounts, nodes],
-  );
-
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-card">
-          <p className="eyebrow">Fastify + React Flow</p>
-          <h1>Canvas Links</h1>
-          <p className="lede">
-            Собирай карту идей, тяни блоки мышью и связывай их без Python и без тяжёлого бэкенда.
-          </p>
-        </div>
-
-        <section className="stats-grid" aria-label="Статистика графа">
-          <article className="stat-card">
-            <span className="stat-card__label">Блоки</span>
-            <strong>{nodes.length}</strong>
-          </article>
-          <article className="stat-card">
-            <span className="stat-card__label">Связи</span>
-            <strong>{edges.length}</strong>
-          </article>
-          <article className="stat-card">
-            <span className="stat-card__label">Активные</span>
-            <strong>{connectedNodes}</strong>
-          </article>
-          <article className={`stat-card tone-${statusTone}`}>
-            <span className="stat-card__label">Статус</span>
-            <strong>{statusTone === 'warning' ? 'Внимание' : statusTone === 'success' ? 'ОК' : 'Ждёт'}</strong>
-          </article>
-        </section>
-
-        <div className="toolbar">
-          <button className="primary" type="button" onClick={handleAddNodeClick}>
-            Добавить блок
-          </button>
-          <button
-            type="button"
-            className={connectMode ? 'is-active' : ''}
-            aria-pressed={connectMode}
-            onClick={() => {
-              const nextConnectMode = !connectMode;
-              setConnectMode(nextConnectMode);
-              setStatus(nextConnectMode ? 'Режим связи включён' : 'Режим связи выключен');
-            }}
-          >
-            {connectMode ? 'Режим связи: вкл' : 'Режим связи: выкл'}
-          </button>
-          <button type="button" className="danger" onClick={deleteSelection}>
-            Удалить выбранное
-          </button>
-          <button type="button" onClick={resetDemo}>
-            Сбросить demo
-          </button>
-        </div>
-
-        <section className="panel inspector">
-          <div className="panel-head">
-            <h2>Инспектор</h2>
-            <span className="badge">{statusText}</span>
-          </div>
-
-          {selectedNode ? (
-            <div className="editor">
-              <label>
-                <span>Название</span>
-                <input
-                  type="text"
-                  value={selectedNode.data.title}
-                  placeholder="Название блока"
-                  onChange={(event) => updateSelectedNodeTitle(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Описание</span>
-                <textarea
-                  rows={5}
-                  value={selectedNode.data.note}
-                  placeholder="Коротко опиши смысл блока"
-                  onChange={(event) => updateSelectedNodeNote(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Цвет</span>
-                <input
-                  type="color"
-                  value={selectedNode.data.color}
-                  onChange={(event) => updateSelectedNodeColor(event.target.value)}
-                />
-              </label>
-              <div className="inspector-meta">
-                <div>
-                  <span className="inspector-meta__label">ID</span>
-                  <strong>{selectedNode.id}</strong>
-                </div>
-                <div>
-                  <span className="inspector-meta__label">Позиция</span>
-                  <strong>
-                    {Math.round(selectedNode.position.x)}, {Math.round(selectedNode.position.y)}
-                  </strong>
-                </div>
-                <div>
-                  <span className="inspector-meta__label">Связей</span>
-                  <strong>{selectedNode.data.linkCount}</strong>
-                </div>
-              </div>
-            </div>
-          ) : selectedEdge ? (
-            <div className="editor edge-editor">
-              <p className="edge-summary">{formatEdgeLabel(nodes, selectedEdge)}</p>
-              <p className="helper">
-                Выдели связь на холсте и удали её, если она больше не нужна.
-              </p>
-              <button type="button" className="danger" onClick={() => handleDeleteEdge(selectedEdge.id)}>
-                Удалить связь
-              </button>
-            </div>
-          ) : (
-            <div className="empty-inspector">
-              <p>Ничего не выбрано.</p>
-              <ul>
-                <li>Кликни по блоку, чтобы открыть свойства.</li>
-                <li>Включи режим связи и соедини два блока.</li>
-                <li>Двойной клик по холсту создаёт новый блок в точке курсора.</li>
-              </ul>
-            </div>
-          )}
-        </section>
-
-        <section className="panel compact tips-panel">
-          <h2>Подсказки</h2>
-          <ul className="tips">
-            <li>Перетаскивай блоки, чтобы перестраивать карту.</li>
-            <li>Связи сохраняются в JSON-файл на сервере и в localStorage.</li>
-            <li>Нажми <kbd>Escape</kbd>, чтобы снять выделение и выключить режим связи.</li>
-          </ul>
-        </section>
-      </aside>
-
       <main className="workspace-shell">
         <div className="canvas-frame" ref={canvasRef} onDoubleClick={handlePaneDoubleClick}>
           <div className="canvas-frame__topbar">
-            <div>
-              <p className="canvas-label">Рабочее поле</p>
-              <h2>Связи и блоки</h2>
+            <div className="canvas-frame__headline">
+              <div>
+                <p className="canvas-label">Рабочее поле</p>
+                <h2>Связи и блоки</h2>
+              </div>
+              <p className="canvas-frame__hint">
+                Клик по цветной полосе меняет цвет. Двойной клик по карточке открывает редактор.
+              </p>
             </div>
-            <div className="canvas-pill">{connectMode ? 'Соединение активно' : 'Обычный режим'}</div>
+
+            <div className="canvas-frame__actions">
+              <span className={`badge tone-${statusTone}`}>{statusText}</span>
+              <span className="canvas-pill">
+                {nodes.length} блоков · {edges.length} связей
+              </span>
+              <button className="primary" type="button" onClick={handleAddNodeClick}>
+                Добавить блок
+              </button>
+              <button
+                type="button"
+                className={connectMode ? 'is-active' : ''}
+                aria-pressed={connectMode}
+                onClick={() => {
+                  const nextConnectMode = !connectMode;
+                  setConnectMode(nextConnectMode);
+                  setStatus(nextConnectMode ? 'Режим связи включён' : 'Режим связи выключен');
+                }}
+              >
+                {connectMode ? 'Режим связи: вкл' : 'Режим связи: выкл'}
+              </button>
+              <button type="button" className="danger" onClick={requestDeleteSelection}>
+                Удалить выбранное
+              </button>
+              <button type="button" onClick={resetDemo}>
+                Сбросить demo
+              </button>
+            </div>
           </div>
 
           <ReactFlow<CanvasNodeType, FlowEdge>
@@ -722,9 +723,15 @@ export function App() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onSelectionChange={handleSelectionChange}
-            onNodeClick={(_: ReactMouseEvent, node) => selectNode(node.id)}
+            onNodeClick={(_: ReactMouseEvent, node) => {
+              setSelectedNodeId(node.id);
+              setSelectedEdgeId(null);
+            }}
             onNodeDragStop={handleNodeDragStop}
-            onEdgeClick={(_: ReactMouseEvent, edge) => selectEdge(edge.id)}
+            onEdgeClick={(_: ReactMouseEvent, edge) => {
+              setSelectedEdgeId(edge.id);
+              setSelectedNodeId(null);
+            }}
             onPaneClick={() => {
               setSelectedNodeId(null);
               setSelectedEdgeId(null);
@@ -734,7 +741,8 @@ export function App() {
             nodesDraggable
             deleteKeyCode={null}
             panOnDrag
-            panOnScroll
+            panOnScroll={false}
+            panActivationKeyCode="Control"
             zoomOnScroll
             defaultEdgeOptions={{
               type: 'canvasEdge',
@@ -746,6 +754,200 @@ export function App() {
           </ReactFlow>
         </div>
       </main>
+
+      {dialog?.kind === 'details' ? (
+        <DialogShell
+          title="Редактирование блока"
+          description="Измени название и описание блока."
+          onClose={closeDialog}
+          className="dialog-shell--wide"
+        >
+          <form
+            className="dialog-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              updateNodeById(dialog.nodeId, {
+                title: dialog.title,
+                note: dialog.note,
+              });
+              closeDialog();
+            }}
+          >
+            <label className="dialog-field">
+              <span>Название</span>
+              <input
+                type="text"
+                value={dialog.title}
+                onChange={(event) =>
+                  setDialog((current) =>
+                    current && current.kind === 'details' ? { ...current, title: event.target.value } : current,
+                  )
+                }
+                placeholder="Название блока"
+                autoFocus
+              />
+            </label>
+
+            <label className="dialog-field">
+              <span>Описание</span>
+              <textarea
+                rows={5}
+                value={dialog.note}
+                onChange={(event) =>
+                  setDialog((current) =>
+                    current && current.kind === 'details' ? { ...current, note: event.target.value } : current,
+                  )
+                }
+                placeholder="Коротко опиши смысл блока"
+              />
+            </label>
+
+            <div className="dialog-meta">
+              <div>
+                <span className="dialog-meta__label">ID</span>
+                <strong>{dialog.nodeId}</strong>
+              </div>
+              <div>
+                <span className="dialog-meta__label">Позиция</span>
+                <strong>
+                  {Math.round(nodesRef.current.find((node) => node.id === dialog.nodeId)?.position.x ?? 0)}, {Math.round(nodesRef.current.find((node) => node.id === dialog.nodeId)?.position.y ?? 0)}
+                </strong>
+              </div>
+            </div>
+
+            <div className="dialog-actions">
+              <button type="button" onClick={closeDialog}>
+                Отмена
+              </button>
+              <button type="submit" className="primary">
+                Сохранить
+              </button>
+            </div>
+          </form>
+        </DialogShell>
+      ) : null}
+
+      {dialog?.kind === 'color' ? (
+        <DialogShell
+          title="Выбор цвета"
+          description="Подбери цвет для блока."
+          onClose={closeDialog}
+          className="dialog-shell--compact"
+        >
+          <form
+            className="dialog-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              updateNodeById(dialog.nodeId, {
+                color: dialog.color,
+              });
+              closeDialog();
+            }}
+          >
+            <label className="dialog-field">
+              <span>Цвет</span>
+              <input
+                type="color"
+                value={dialog.color}
+                onChange={(event) =>
+                  setDialog((current) =>
+                    current && current.kind === 'color' ? { ...current, color: event.target.value } : current,
+                  )
+                }
+                autoFocus
+              />
+            </label>
+
+            <div className="dialog-swatch" style={{ '--node-color': dialog.color } as CSSProperties} />
+
+            <div className="dialog-actions">
+              <button type="button" onClick={closeDialog}>
+                Отмена
+              </button>
+              <button type="submit" className="primary">
+                Сохранить
+              </button>
+            </div>
+          </form>
+        </DialogShell>
+      ) : null}
+
+      {dialog?.kind === 'confirm-delete' ? (
+        <DialogShell
+          title="Подтверждение удаления"
+          description="Удаление нельзя будет отменить."
+          onClose={closeDialog}
+          className="dialog-shell--compact"
+        >
+          <div className="dialog-confirm">
+            <p>
+              {dialog.target === 'node'
+                ? `Удалить блок «${dialog.label}»? Он также удалит все связанные связи.`
+                : `Удалить связь «${dialog.label}»?`}
+            </p>
+          </div>
+
+          <div className="dialog-actions">
+            <button type="button" onClick={closeDialog}>
+              Отмена
+            </button>
+            <button type="button" className="danger" onClick={confirmDelete}>
+              Удалить
+            </button>
+          </div>
+        </DialogShell>
+      ) : null}
+    </div>
+  );
+}
+
+function DialogShell({
+  title,
+  description,
+  onClose,
+  children,
+  className,
+}: {
+  title: string;
+  description: string;
+  onClose: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+
+  return (
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={() => {
+        onClose();
+      }}
+    >
+      <section
+        className={`dialog-shell ${className ?? ''}`.trim()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+        }}
+      >
+        <div className="dialog-shell__header">
+          <div>
+            <p className="dialog-shell__eyebrow">Редактор</p>
+            <h3 id={titleId}>{title}</h3>
+            <p id={descriptionId}>{description}</p>
+          </div>
+          <button type="button" className="dialog-shell__close" aria-label="Закрыть окно" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        {children}
+      </section>
     </div>
   );
 }
