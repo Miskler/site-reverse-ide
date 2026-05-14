@@ -489,6 +489,11 @@ button.is-active {
   width: min(700px, calc(100vw - 2rem));
 }
 
+.dialog-shell--color-picker {
+  width: min(540px, calc(100vw - 1rem));
+  padding: 0.9rem;
+}
+
 .dialog-shell__header {
   display: flex;
   justify-content: space-between;
@@ -533,6 +538,10 @@ button.is-active {
   gap: 1rem;
 }
 
+.dialog-form--color-picker {
+  gap: 0.9rem;
+}
+
 .dialog-field {
   display: grid;
   gap: 0.45rem;
@@ -545,8 +554,7 @@ button.is-active {
 }
 
 .dialog-field input[type="text"],
-.dialog-field textarea,
-.dialog-field input[type="color"] {
+.dialog-field textarea {
   width: 100%;
   border-radius: 18px;
   border: 1px solid rgba(23, 32, 41, 0.12);
@@ -558,8 +566,7 @@ button.is-active {
 }
 
 .dialog-field input[type="text"]:focus,
-.dialog-field textarea:focus,
-.dialog-field input[type="color"]:focus {
+.dialog-field textarea:focus {
   border-color: rgba(47, 143, 131, 0.42);
   box-shadow: 0 0 0 4px rgba(47, 143, 131, 0.12);
 }
@@ -567,22 +574,6 @@ button.is-active {
 .dialog-field textarea {
   min-height: 140px;
   resize: vertical;
-}
-
-.dialog-field input[type="color"] {
-  min-height: 64px;
-  padding: 0.35rem;
-  cursor: pointer;
-}
-
-.dialog-swatch {
-  height: 64px;
-  border-radius: 20px;
-  border: 1px solid rgba(23, 32, 41, 0.12);
-  background:
-    linear-gradient(135deg, var(--node-color, var(--accent)), rgba(255, 255, 255, 0.1)),
-    var(--node-color, var(--accent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .dialog-confirm {
@@ -600,6 +591,153 @@ button.is-active {
   justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 0.25rem;
+}
+
+.color-picker {
+  display: grid;
+  gap: 1rem;
+}
+
+.color-picker__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 0.7rem;
+  align-items: stretch;
+}
+
+.color-picker__square {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: 260px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(23, 32, 41, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.52),
+    0 14px 28px rgba(23, 32, 41, 0.12);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.color-picker__square-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.color-picker__square-overlay--white {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0));
+}
+
+.color-picker__square-overlay--black {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 1));
+}
+
+.color-picker__cursor {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(23, 32, 41, 0.28),
+    0 5px 12px rgba(23, 32, 41, 0.22);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.color-picker__hue {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(23, 32, 41, 0.14);
+  background: linear-gradient(
+    180deg,
+    #ff0000 0%,
+    #ff00ff 16%,
+    #0000ff 33%,
+    #00ffff 50%,
+    #00ff00 66%,
+    #ffff00 83%,
+    #ff0000 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.52),
+    0 14px 28px rgba(23, 32, 41, 0.12);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.color-picker__hue-track {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.color-picker__hue-thumb {
+  position: absolute;
+  left: 50%;
+  width: calc(100% - 0.35rem);
+  height: 4px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(23, 32, 41, 0.18), 0 4px 12px rgba(23, 32, 41, 0.24);
+  pointer-events: none;
+}
+
+.color-picker__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.color-picker__preview {
+  flex: 1 1 auto;
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid rgba(23, 32, 41, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.color-picker__readout {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 116px;
+}
+
+.color-picker__readout span {
+  color: #6b7680;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.color-picker__readout strong {
+  color: #202c37;
+  font-size: 0.98rem;
+  letter-spacing: 0.04em;
+}
+
+.color-picker__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.color-picker__swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 10px rgba(23, 32, 41, 0.16);
+}
+
+.color-picker__swatch.is-active {
+  box-shadow:
+    0 0 0 2px rgba(47, 143, 131, 0.45),
+    0 4px 10px rgba(23, 32, 41, 0.16);
 }
 
 .canvas-flow {

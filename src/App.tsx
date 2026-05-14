@@ -5,10 +5,10 @@ import {
   useRef,
   useState,
   useId,
-  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
+import { flushSync } from 'react-dom';
 import {
   Background,
   BackgroundVariant,
@@ -33,6 +33,7 @@ import {
   type GraphNode,
 } from './shared/graph';
 import { CanvasEdge } from './components/CanvasEdge';
+import { ColorPicker } from './components/ColorPicker';
 import { CanvasNode, type CanvasNodeType } from './components/CanvasNode';
 
 type StatusTone = 'neutral' | 'success' | 'warning';
@@ -50,6 +51,7 @@ type DialogState =
       kind: 'color';
       nodeId: string;
       color: string;
+      originalColor: string;
     }
   | {
       kind: 'confirm-delete';
@@ -115,8 +117,13 @@ export function App() {
   const saveTimerRef = useRef<number | null>(null);
   const statusTimerRef = useRef<number | null>(null);
   const fittedRef = useRef(false);
+  const dialogRef = useRef(dialog);
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
+
+  useEffect(() => {
+    dialogRef.current = dialog;
+  }, [dialog]);
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -526,6 +533,7 @@ export function App() {
       kind: 'color',
       nodeId,
       color: node.data.color,
+      originalColor: node.data.color,
     });
   }, []);
 
@@ -575,9 +583,32 @@ export function App() {
     setDialog(null);
   }, [dialog]);
 
-  const closeDialog = useCallback(() => {
-    setDialog(null);
+  const previewNodeColor = useCallback((nodeId: string, color: string) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => {
+        if (node.id !== nodeId) {
+          return node;
+        }
+
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            color,
+          },
+        };
+      }),
+    );
   }, []);
+
+  const closeDialog = useCallback(() => {
+    const current = dialogRef.current;
+    if (current?.kind === 'color') {
+      previewNodeColor(current.nodeId, current.originalColor);
+    }
+
+    setDialog(null);
+  }, [previewNodeColor]);
 
   function requestDeleteSelection() {
     if (selectedNodeId) {
@@ -829,36 +860,32 @@ export function App() {
 
       {dialog?.kind === 'color' ? (
         <DialogShell
-          title="Выбор цвета"
-          description="Подбери цвет для блока."
+          title="Палитра цвета"
+          description=""
           onClose={closeDialog}
-          className="dialog-shell--compact"
+          className="dialog-shell--wide dialog-shell--color-picker"
         >
           <form
-            className="dialog-form"
+            className="dialog-form dialog-form--color-picker"
             onSubmit={(event) => {
               event.preventDefault();
               updateNodeById(dialog.nodeId, {
                 color: dialog.color,
               });
-              closeDialog();
+              setDialog(null);
             }}
           >
-            <label className="dialog-field">
-              <span>Цвет</span>
-              <input
-                type="color"
-                value={dialog.color}
-                onChange={(event) =>
+            <ColorPicker
+              value={dialog.color}
+              onChange={(nextColor) => {
+                flushSync(() => {
+                  previewNodeColor(dialog.nodeId, nextColor);
                   setDialog((current) =>
-                    current && current.kind === 'color' ? { ...current, color: event.target.value } : current,
-                  )
-                }
-                autoFocus
-              />
-            </label>
-
-            <div className="dialog-swatch" style={{ '--node-color': dialog.color } as CSSProperties} />
+                    current && current.kind === 'color' ? { ...current, color: nextColor } : current,
+                  );
+                });
+              }}
+            />
 
             <div className="dialog-actions">
               <button type="button" onClick={closeDialog}>
@@ -909,13 +936,14 @@ function DialogShell({
   className,
 }: {
   title: string;
-  description: string;
+  description?: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
 }) {
   const titleId = useId();
   const descriptionId = useId();
+  const hasDescription = Boolean(description?.trim());
 
   return (
     <div
@@ -930,7 +958,7 @@ function DialogShell({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+        aria-describedby={hasDescription ? descriptionId : undefined}
         onMouseDown={(event) => {
           event.stopPropagation();
         }}
@@ -939,7 +967,7 @@ function DialogShell({
           <div>
             <p className="dialog-shell__eyebrow">Редактор</p>
             <h3 id={titleId}>{title}</h3>
-            <p id={descriptionId}>{description}</p>
+            {hasDescription ? <p id={descriptionId}>{description}</p> : null}
           </div>
           <button type="button" className="dialog-shell__close" aria-label="Закрыть окно" onClick={onClose}>
             ×
