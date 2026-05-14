@@ -1,23 +1,23 @@
 :root {
   color-scheme: dark;
   --bg: #000000;
-  --bg-soft: #0a0a0a;
-  --sidebar: #101723;
-  --sidebar-soft: #182231;
-  --sidebar-soft-2: #212c3d;
-  --text: #16202b;
-  --muted: #66717d;
-  --line: rgba(23, 32, 41, 0.12);
+  --bg-soft: #05070b;
+  --sidebar: #05080d;
+  --sidebar-soft: #0d1117;
+  --sidebar-soft-2: #151a24;
+  --text: #e8edf2;
+  --muted: #9aa7b5;
+  --line: rgba(255, 255, 255, 0.08);
   --accent: #2f8f83;
   --accent-2: #ef7d57;
   --accent-3: #d9a441;
   --danger: #d04f45;
   --success: #3a9d63;
   --warning: #c07b1a;
-  --card: rgba(255, 255, 255, 0.94);
-  --card-border: rgba(255, 255, 255, 0.78);
-  --shadow: 0 30px 70px rgba(15, 22, 30, 0.16);
-  --shadow-soft: 0 16px 36px rgba(15, 22, 30, 0.1);
+  --card: rgba(12, 16, 22, 0.96);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 30px 70px rgba(0, 0, 0, 0.58);
+  --shadow-soft: 0 16px 36px rgba(0, 0, 0, 0.38);
   --radius-xl: 18px;
   --radius-lg: 14px;
   --radius-md: 10px;
@@ -48,8 +48,11 @@ body,
 body {
   min-height: 100vh;
   font-family: var(--font-body);
-  color: #e8e8e8;
-  background: var(--bg);
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(47, 143, 131, 0.12), transparent 30%),
+    radial-gradient(circle at top right, rgba(239, 125, 87, 0.09), transparent 22%),
+    var(--bg);
 }
 
 button,
@@ -152,7 +155,7 @@ button.is-active {
 .stat-card {
   padding: 0.95rem 1rem;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: var(--shadow-soft);
 }
@@ -187,7 +190,7 @@ button.is-active {
 .toolbar button {
   width: 100%;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #edf3f7;
 }
@@ -199,7 +202,7 @@ button.is-active {
 .panel {
   padding: 1rem;
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.07);
   backdrop-filter: blur(14px);
   box-shadow: var(--shadow-soft);
@@ -230,8 +233,8 @@ button.is-active {
   justify-content: center;
   padding: 0.4rem 0.75rem;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #b7c4cf;
+  background: rgba(255, 255, 255, 0.05);
+  color: #c5d0db;
   font-size: 0.78rem;
 }
 
@@ -257,8 +260,8 @@ button.is-active {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-md);
-  background: rgba(9, 12, 17, 0.36);
-  color: #fff;
+  background: rgba(8, 11, 16, 0.94);
+  color: #edf3f7;
   padding: 0.85rem 0.95rem;
   outline: none;
   transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
@@ -286,7 +289,7 @@ button.is-active {
 .inspector-meta div {
   padding: 0.8rem 0.85rem;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -343,7 +346,7 @@ button.is-active {
   display: inline-block;
   padding: 0.14rem 0.42rem;
   border-radius: 0.45rem;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -392,21 +395,21 @@ button.is-active {
 
 .canvas-pill {
   pointer-events: auto;
-  color: #41515f;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(23, 32, 41, 0.08);
+  color: #d8e1ea;
+  background: rgba(10, 14, 20, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .badge.tone-success {
-  color: #166343;
-  background: rgba(58, 157, 99, 0.12);
-  border: 1px solid rgba(58, 157, 99, 0.18);
+  color: #cdeedd;
+  background: rgba(58, 157, 99, 0.14);
+  border: 1px solid rgba(58, 157, 99, 0.22);
 }
 
 .badge.tone-warning {
-  color: #8e5d12;
-  background: rgba(208, 123, 26, 0.12);
-  border: 1px solid rgba(208, 123, 26, 0.18);
+  color: #ffe1b0;
+  background: rgba(208, 123, 26, 0.14);
+  border: 1px solid rgba(208, 123, 26, 0.22);
 }
 
 .dialog-backdrop {
@@ -417,7 +420,7 @@ button.is-active {
   place-items: center;
   align-content: start;
   padding: 1rem;
-  background: rgba(12, 18, 25, 0.42);
+  background: rgba(0, 0, 0, 0.72);
   overflow-y: auto;
 }
 
@@ -426,11 +429,11 @@ button.is-active {
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
   border-radius: 16px;
-  border: 1px solid rgba(23, 32, 41, 0.14);
-  background: #fbf8f3;
-  box-shadow: 0 20px 48px rgba(12, 18, 25, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0b1016;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55);
   padding: 1.15rem;
-  color: var(--text);
+  color: #edf3f7;
 }
 
 .dialog-shell--compact {
@@ -468,9 +471,9 @@ button.is-active {
   height: 2.35rem;
   border-radius: 10px;
   padding: 0;
-  background: rgba(23, 32, 41, 0.06);
-  color: #31404d;
-  border: 1px solid rgba(23, 32, 41, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #d5dee8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   flex: 0 0 auto;
 }
 
@@ -497,7 +500,7 @@ button.is-active {
 }
 
 .dialog-field > span {
-  color: #41515f;
+  color: #c5d0db;
   font-size: 0.92rem;
   font-weight: 600;
 }
@@ -506,9 +509,9 @@ button.is-active {
 .dialog-field textarea {
   width: 100%;
   border-radius: 18px;
-  border: 1px solid rgba(23, 32, 41, 0.12);
-  background: #fff;
-  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 12, 18, 0.94);
+  color: #edf3f7;
   padding: 0.9rem 1rem;
   outline: none;
   transition: border-color 140ms ease, box-shadow 140ms ease;
@@ -534,9 +537,9 @@ button.is-active {
   min-width: 0;
   padding: 0.95rem;
   border-radius: 20px;
-  border: 1px solid rgba(23, 32, 41, 0.08);
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .schema-generator__pane .dialog-field {
@@ -547,8 +550,8 @@ button.is-active {
   width: 100%;
   min-width: 0;
   border-radius: 18px;
-  border: 1px solid rgba(10, 16, 24, 0.18);
-  background: #101726;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0a0f15;
   overflow: hidden;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
@@ -584,8 +587,8 @@ button.is-active {
 
 .schema-generator__code-mirror .cm-gutters {
   border-right: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  color: #91a0ad;
+  background: #090d13;
+  color: #8d99a6;
 }
 
 .schema-generator__code-mirror .cm-activeLine,
@@ -600,7 +603,7 @@ button.is-active {
 
 .schema-generator__code-mirror .cm-tooltip {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: #111b2a;
+  background: #101722;
   color: #edf4ff;
 }
 
@@ -638,7 +641,7 @@ button.is-active {
 }
 
 .dialog-hint {
-  color: #6e7d8a;
+  color: #92a1b0;
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -651,13 +654,13 @@ button.is-active {
 }
 
 .dialog-feedback--error {
-  background: rgba(208, 79, 69, 0.08);
-  border-color: rgba(208, 79, 69, 0.16);
-  color: #a14139;
+  background: rgba(208, 79, 69, 0.12);
+  border-color: rgba(208, 79, 69, 0.24);
+  color: #ffb0a8;
 }
 
 .dialog-status {
-  color: #41515f;
+  color: #c8d1db;
   font-size: 0.9rem;
   font-weight: 600;
 }
@@ -686,7 +689,7 @@ button.is-active {
 
 .dialog-confirm p {
   margin: 0;
-  color: #3b4855;
+  color: #c4cfdb;
   line-height: 1.55;
 }
 
@@ -715,10 +718,10 @@ button.is-active {
   min-height: 260px;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(23, 32, 41, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.52),
-    0 14px 28px rgba(23, 32, 41, 0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 28px rgba(0, 0, 0, 0.28);
   cursor: crosshair;
   touch-action: none;
 }
@@ -744,8 +747,8 @@ button.is-active {
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.96);
   box-shadow:
-    0 0 0 1px rgba(23, 32, 41, 0.28),
-    0 5px 12px rgba(23, 32, 41, 0.22);
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 5px 12px rgba(0, 0, 0, 0.35);
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -754,7 +757,7 @@ button.is-active {
   position: relative;
   overflow: hidden;
   border-radius: 16px;
-  border: 1px solid rgba(23, 32, 41, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(
     180deg,
     #ff0000 0%,
@@ -766,8 +769,8 @@ button.is-active {
     #ff0000 100%
   );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.52),
-    0 14px 28px rgba(23, 32, 41, 0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 28px rgba(0, 0, 0, 0.28);
   cursor: ns-resize;
   touch-action: none;
 }
@@ -785,8 +788,8 @@ button.is-active {
   height: 4px;
   transform: translate(-50%, -50%);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 0 0 1px rgba(23, 32, 41, 0.18), 0 4px 12px rgba(23, 32, 41, 0.24);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.3);
   pointer-events: none;
 }
 
@@ -800,8 +803,8 @@ button.is-active {
   flex: 1 1 auto;
   height: 40px;
   border-radius: 14px;
-  border: 1px solid rgba(23, 32, 41, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .color-picker__readout {
@@ -811,14 +814,14 @@ button.is-active {
 }
 
 .color-picker__readout span {
-  color: #6b7680;
+  color: #9aa7b5;
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.14em;
 }
 
 .color-picker__readout strong {
-  color: #202c37;
+  color: #edf3f7;
   font-size: 0.98rem;
   letter-spacing: 0.04em;
 }
@@ -835,13 +838,13 @@ button.is-active {
   padding: 0;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 4px 10px rgba(23, 32, 41, 0.16);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 .color-picker__swatch.is-active {
   box-shadow:
     0 0 0 2px rgba(47, 143, 131, 0.45),
-    0 4px 10px rgba(23, 32, 41, 0.16);
+    0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 .canvas-flow {
@@ -868,14 +871,16 @@ button.is-active {
   bottom: 1rem;
   left: 1rem;
   right: auto;
-  border: 1px solid rgba(23, 32, 41, 0.08);
+  background: rgba(10, 14, 20, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  box-shadow: 0 12px 26px rgba(23, 32, 41, 0.1);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.35);
 }
 
 .canvas-flow .react-flow__controls-button {
-  background: rgba(255, 255, 255, 0.94);
-  border-bottom: 1px solid rgba(23, 32, 41, 0.08);
+  background: rgba(8, 12, 18, 0.94);
+  color: #edf3f7;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .graph-node {
@@ -885,11 +890,11 @@ button.is-active {
   min-height: 144px;
   padding: 0.95rem 0.95rem 0.95rem 1.2rem;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(11, 16, 23, 0.97);
   border: 1px solid var(--card-border);
   box-shadow:
-    0 8px 18px rgba(23, 32, 41, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    0 8px 18px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
   user-select: none;
   overflow: visible;
   transition:
@@ -905,7 +910,7 @@ button.is-active {
   border-radius: 14px 0 0 14px;
   padding: 0;
   background: var(--node-color, var(--accent));
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.18);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.08);
   cursor: pointer;
   z-index: 1;
 }
@@ -923,16 +928,16 @@ button.is-active {
 
 .graph-node:hover {
   box-shadow:
-    0 16px 28px rgba(23, 32, 41, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    0 16px 28px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .graph-node.is-selected {
   border-color: rgba(47, 143, 131, 0.45);
   box-shadow:
-    0 18px 34px rgba(23, 32, 41, 0.2),
+    0 18px 34px rgba(0, 0, 0, 0.52),
     0 0 0 3px rgba(47, 143, 131, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .graph-node__chrome {
@@ -951,11 +956,11 @@ button.is-active {
   min-width: 0;
   height: 2.1rem;
   border-radius: 10px;
-  border: 1px solid rgba(23, 32, 41, 0.14);
-  background: rgba(255, 255, 255, 0.92);
-  color: #18212b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 12, 18, 0.94);
+  color: #edf3f7;
   padding: 0 0.65rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .graph-node__method {
@@ -972,9 +977,9 @@ button.is-active {
   display: grid;
   place-items: center;
   border-radius: 10px;
-  background: rgba(208, 79, 69, 0.08);
-  color: #a14139;
-  border: 1px solid rgba(208, 79, 69, 0.14);
+  background: rgba(208, 79, 69, 0.12);
+  color: #ffb0a8;
+  border: 1px solid rgba(208, 79, 69, 0.18);
   padding: 0;
 }
 
@@ -1003,11 +1008,11 @@ button.is-active {
 }
 
 .graph-node__note-input::placeholder {
-  color: rgba(82, 93, 104, 0.72);
+  color: rgba(154, 167, 181, 0.7);
 }
 
 .graph-node__note-input:focus {
-  color: #18212b;
+  color: #edf3f7;
 }
 
 .graph-node__note-input:focus-visible {
@@ -1023,9 +1028,9 @@ button.is-active {
 .graph-node__handle {
   width: 13px;
   height: 13px;
-  border: 2px solid rgba(255, 255, 255, 0.95);
+  border: 2px solid rgba(8, 11, 16, 0.96);
   background: var(--node-color, var(--accent));
-  box-shadow: 0 4px 10px rgba(23, 32, 41, 0.18);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
   opacity: 0;
   transition:
     opacity 140ms ease,
@@ -1049,10 +1054,10 @@ button.is-active {
 }
 
 .graph-edge__path {
-  stroke: rgba(23, 32, 41, 0.38);
+  stroke: rgba(230, 237, 242, 0.28);
   stroke-width: 3.1;
   stroke-linecap: round;
-  filter: drop-shadow(0 8px 10px rgba(23, 32, 41, 0.12));
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.28));
   transition: stroke 140ms ease, stroke-width 140ms ease, opacity 140ms ease;
 }
 
