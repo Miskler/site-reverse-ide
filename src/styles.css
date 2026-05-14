@@ -355,7 +355,7 @@ button.is-active {
 .workspace-shell {
   min-width: 0;
   min-height: 0;
-  padding: 1rem;
+  padding: 0;
   height: 100vh;
 }
 
@@ -367,13 +367,13 @@ button.is-active {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-radius: 34px;
-  border: 1px solid rgba(23, 32, 41, 0.08);
+  border-radius: 0;
+  border: 0;
   background:
     radial-gradient(circle at top right, rgba(255, 255, 255, 0.72), transparent 28%),
     radial-gradient(circle at bottom left, rgba(47, 143, 131, 0.13), transparent 30%),
     linear-gradient(180deg, rgba(249, 246, 239, 0.96) 0%, rgba(242, 236, 225, 0.98) 100%);
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 .canvas-frame::before {
@@ -839,12 +839,12 @@ button.is-active {
 
 @media (max-width: 760px) {
   .workspace-shell {
-    padding: 0.85rem;
+    padding: 0;
     height: 100vh;
   }
 
   .canvas-frame {
-    border-radius: 26px;
+    border-radius: 0;
   }
 
   .canvas-frame__topbar {
