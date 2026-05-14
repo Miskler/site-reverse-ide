@@ -4,6 +4,22 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   publicDir: 'static',
+  optimizeDeps: {
+    exclude: [
+      '@uiw/react-codemirror',
+      '@uiw/codemirror-extensions-basic-setup',
+      '@codemirror/commands',
+      '@codemirror/lang-json',
+      '@codemirror/language',
+      '@codemirror/state',
+      '@codemirror/theme-one-dark',
+      '@codemirror/view',
+      '@lezer/common',
+      '@lezer/highlight',
+      '@lezer/lr',
+      'codemirror',
+    ],
+  },
   server: {
     port: 5173,
     strictPort: true,

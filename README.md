@@ -13,6 +13,8 @@ Development:
 
 - UI: `http://127.0.0.1:5173`
 - Node API: `http://127.0.0.1:3001`
+- The node editor popup now accepts raw JSON and sends it to the Python `genschema` backend.
+- By default the UI expects that backend at `http://127.0.0.1:8000`; set `VITE_GENSCHEMA_URL` if you run it elsewhere.
 
 Production:
 

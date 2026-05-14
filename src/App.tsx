@@ -9,6 +9,11 @@
   type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
+import CodeMirror from '@uiw/react-codemirror';
+import { json } from '@codemirror/lang-json';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { EditorView } from '@codemirror/view';
+import { tags as t } from '@lezer/highlight';
 import {
   Background,
   BackgroundVariant,
@@ -45,11 +50,12 @@ type FlowEdge = Edge;
 
 type DialogState =
   | {
-      kind: 'details';
+      kind: 'schema-generator';
       nodeId: string;
-      method: HttpMethod;
-      title: string;
-      note: string;
+      rawJson: string;
+      generatedSchema: string;
+      error: string | null;
+      isGenerating: boolean;
     }
   | {
       kind: 'color';
@@ -73,6 +79,103 @@ const edgeTypes = {
   canvasEdge: CanvasEdge,
 };
 
+const JSON_HIGHLIGHT_STYLE = HighlightStyle.define(
+  [
+    { tag: t.propertyName, class: 'schema-generator__token--property-name' },
+    { tag: t.string, class: 'schema-generator__token--string' },
+    { tag: t.number, class: 'schema-generator__token--number' },
+    { tag: t.bool, class: 'schema-generator__token--boolean' },
+    { tag: t.null, class: 'schema-generator__token--null' },
+    { tag: [t.brace, t.squareBracket, t.separator], class: 'schema-generator__token--punctuation' },
+  ],
+  { themeType: 'dark' },
+);
+
+const JSON_EDITOR_THEME = EditorView.theme(
+  {
+    '&': {
+      backgroundColor: '#101726',
+      color: '#e5eef7',
+    },
+    '.cm-scroller': {
+      fontFamily:
+        '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
+      fontSize: '0.88rem',
+      lineHeight: '1.55',
+    },
+    '.cm-content': {
+      caretColor: '#ffffff',
+      padding: '0.95rem 1rem',
+    },
+    '.cm-cursor, .cm-dropCursor': {
+      borderLeftColor: '#ffffff',
+    },
+    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
+      {
+        backgroundColor: 'rgba(76, 137, 255, 0.22) !important',
+      },
+    '.cm-activeLine': {
+      backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    },
+    '.cm-gutters': {
+      backgroundColor: '#0d1521',
+      color: '#9aa7b8',
+      borderRight: '1px solid rgba(255, 255, 255, 0.08)',
+    },
+    '.cm-tooltip': {
+      backgroundColor: '#111b2a',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      color: '#edf4ff',
+    },
+  },
+  { dark: true },
+);
+
+const JSON_EXTENSIONS = [json(), syntaxHighlighting(JSON_HIGHLIGHT_STYLE)];
+const SCHEMA_EDITOR_HEIGHT = 'clamp(320px, 45vh, 520px)';
+
+const DEFAULT_GENSCHEMA_BASE_URL = 'http://127.0.0.1:8000';
+const configuredGenschemaBaseUrl = import.meta.env.VITE_GENSCHEMA_URL?.trim();
+const GENSCHEMA_API_URL = (() => {
+  try {
+    return new URL('/api/genschema', configuredGenschemaBaseUrl || DEFAULT_GENSCHEMA_BASE_URL).toString();
+  } catch {
+    return new URL('/api/genschema', DEFAULT_GENSCHEMA_BASE_URL).toString();
+  }
+})();
+const GENSCHEMA_BASE_URL = new URL(GENSCHEMA_API_URL).origin;
+
+type GenschemaResponse = {
+  schema: unknown;
+  meta?: {
+    inputs?: number;
+    comparators?: string[];
+    base_of?: string;
+    pseudo_array?: boolean;
+    postprocessed?: boolean;
+  };
+};
+
+function formatGeneratedSchema(schema: unknown): string {
+  if (typeof schema === 'string') {
+    const trimmed = schema.trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    try {
+      return JSON.stringify(JSON.parse(trimmed), null, 2);
+    } catch {
+      return schema;
+    }
+  }
+
+  return JSON.stringify(schema, null, 2);
+}
+
 const api = {
   async loadGraph(): Promise<unknown> {
     const response = await fetch('/api/graph', {
@@ -86,6 +189,26 @@ const api = {
     }
 
     return response.json();
+  },
+  async generateSchema(sample: unknown): Promise<GenschemaResponse> {
+    const response = await fetch(GENSCHEMA_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        documents: [sample],
+        use_default_comparators: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; detail?: string };
+      throw new Error(payload.error || payload.detail || `Failed to generate schema (${response.status})`);
+    }
+
+    return response.json() as Promise<GenschemaResponse>;
   },
   async saveGraph(graph: GraphDocument): Promise<GraphDocument> {
     const response = await fetch('/api/graph', {
@@ -119,12 +242,14 @@ export function App() {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const saveRequestIdRef = useRef(0);
+  const schemaGenerationRequestRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
   const fittedRef = useRef(false);
   const dialogRef = useRef(dialog);
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   const connectMode = true;
+  const schemaGeneratorNodeId = dialog?.kind === 'schema-generator' ? dialog.nodeId : null;
 
   useEffect(() => {
     dialogRef.current = dialog;
@@ -137,6 +262,16 @@ export function App() {
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+
+  useEffect(() => {
+    if (dialog?.kind !== 'schema-generator') {
+      return;
+    }
+
+    return () => {
+      schemaGenerationRequestRef.current += 1;
+    };
+  }, [schemaGeneratorNodeId]);
 
   useEffect(() => {
     void loadInitialGraph();
@@ -167,7 +302,7 @@ export function App() {
       return;
     }
 
-    if (dialog.kind === 'details' || dialog.kind === 'color') {
+    if (dialog.kind === 'schema-generator' || dialog.kind === 'color') {
       if (!nodes.some((node) => node.id === dialog.nodeId)) {
         setDialog(null);
       }
@@ -546,14 +681,25 @@ export function App() {
       return;
     }
 
+    const rawJson = JSON.stringify(
+      {
+        method: node.data.method,
+        title: node.data.title,
+        description: node.data.note,
+      },
+      null,
+      2,
+    );
+
     setSelectedNodeId(nodeId);
     setSelectedEdgeId(null);
     setDialog({
-      kind: 'details',
+      kind: 'schema-generator',
       nodeId,
-      method: node.data.method,
-      title: node.data.title,
-      note: node.data.note,
+      rawJson,
+      generatedSchema: '',
+      error: null,
+      isGenerating: false,
     });
   }, []);
 
@@ -645,6 +791,91 @@ export function App() {
 
     setDialog(null);
   }, [previewNodeColor]);
+
+  function updateSchemaGeneratorRawJson(rawJson: string) {
+    setDialog((current) =>
+      current && current.kind === 'schema-generator'
+        ? {
+            ...current,
+            rawJson,
+            generatedSchema: '',
+            error: null,
+          }
+        : current,
+    );
+  }
+
+  async function generateSchemaFromRawJson() {
+    const current = dialogRef.current;
+    if (!current || current.kind !== 'schema-generator') {
+      return;
+    }
+
+    let parsedSample: unknown;
+    try {
+      parsedSample = JSON.parse(current.rawJson);
+    } catch {
+      setDialog((dialogState) =>
+        dialogState && dialogState.kind === 'schema-generator'
+          ? {
+              ...dialogState,
+              error: 'Сырой JSON должен быть валидным. Исправь синтаксис и попробуй снова.',
+              isGenerating: false,
+            }
+          : dialogState,
+      );
+      setStatus('JSON нужно исправить перед генерацией', 'warning');
+      return;
+    }
+
+    const requestId = ++schemaGenerationRequestRef.current;
+
+    setDialog((dialogState) =>
+      dialogState && dialogState.kind === 'schema-generator'
+        ? {
+            ...dialogState,
+            error: null,
+            isGenerating: true,
+          }
+        : dialogState,
+    );
+
+    try {
+      const response = await api.generateSchema(parsedSample);
+      if (schemaGenerationRequestRef.current !== requestId) {
+        return;
+      }
+
+      const formattedSchema = formatGeneratedSchema(response.schema);
+      setDialog((dialogState) =>
+        dialogState && dialogState.kind === 'schema-generator'
+          ? {
+              ...dialogState,
+              generatedSchema: formattedSchema,
+              error: null,
+              isGenerating: false,
+            }
+          : dialogState,
+      );
+      setStatus('Схема сгенерирована через Python backend', 'success');
+    } catch (error) {
+      if (schemaGenerationRequestRef.current !== requestId) {
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : 'Не удалось сгенерировать схему';
+      setDialog((dialogState) =>
+        dialogState && dialogState.kind === 'schema-generator'
+          ? {
+              ...dialogState,
+              error: message,
+              isGenerating: false,
+            }
+          : dialogState,
+      );
+      setStatus(message, 'warning');
+    }
+  }
 
   function requestDeleteSelection() {
     if (selectedNodeId) {
@@ -801,80 +1032,75 @@ export function App() {
         </div>
       </main>
 
-      {dialog?.kind === 'details' ? (
-        <DialogShell
-          title="Редактирование функции"
-          onClose={closeDialog}
-          className="dialog-shell--wide"
-        >
+      {dialog?.kind === 'schema-generator' ? (
+        <DialogShell title="Генератор схемы JSON" onClose={closeDialog} className="dialog-shell--schema">
           <form
-            className="dialog-form"
+            className="dialog-form dialog-form--schema"
             onSubmit={(event) => {
               event.preventDefault();
-              updateNodeById(dialog.nodeId, {
-                method: dialog.method,
-                title: dialog.title.trim() || 'Без названия',
-                note: dialog.note,
-              });
-              closeDialog();
+              void generateSchemaFromRawJson();
             }}
           >
-            <label className="dialog-field">
-              <span>Метод</span>
-              <select
-                value={dialog.method}
-                onChange={(event) =>
-                  setDialog((current) =>
-                    current && current.kind === 'details'
-                      ? { ...current, method: normalizeHttpMethod(event.target.value, current.method) }
-                      : current,
-                  )
-                }
-              >
-                {HTTP_METHODS.map((method) => (
-                  <option key={method} value={method}>
-                    {method}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="schema-generator__grid">
+              <label className="dialog-field dialog-field--code schema-generator__pane">
+                <span>Сырой JSON</span>
+                <CodeMirror
+                  className="schema-generator__code-mirror schema-generator__code-mirror--input"
+                  value={dialog.rawJson}
+                  onChange={(value) => updateSchemaGeneratorRawJson(value)}
+                  autoFocus
+                  height={SCHEMA_EDITOR_HEIGHT}
+                  theme={JSON_EDITOR_THEME}
+                  extensions={JSON_EXTENSIONS}
+                  placeholder={`{\n  "name": "Alice",\n  "email": "alice@example.com"\n}`}
+                  spellCheck={false}
+                />
+                <small className="dialog-hint">Можно вставить объект, массив или любое другое валидное JSON-значение.</small>
+              </label>
 
-            <label className="dialog-field">
-              <span>Функция</span>
-              <input
-                type="text"
-                value={dialog.title}
-                onChange={(event) =>
-                  setDialog((current) =>
-                    current && current.kind === 'details' ? { ...current, title: event.target.value } : current,
-                  )
-                }
-                placeholder="Название функции"
-                autoFocus
-              />
-            </label>
+              <div className="schema-generator__pane">
+                <div className="dialog-field dialog-field--code">
+                  <span>Схема</span>
+                  <CodeMirror
+                    className="schema-generator__code-mirror schema-generator__code-mirror--output"
+                    value={dialog.generatedSchema || ''}
+                    height={SCHEMA_EDITOR_HEIGHT}
+                    theme={JSON_EDITOR_THEME}
+                    extensions={JSON_EXTENSIONS}
+                    editable={false}
+                    readOnly
+                    basicSetup={false}
+                    placeholder="Нажми «Сгенерировать схему», чтобы увидеть результат."
+                    spellCheck={false}
+                  />
+                </div>
 
-            <label className="dialog-field">
-              <span>Описание</span>
-              <textarea
-                rows={5}
-                value={dialog.note}
-                onChange={(event) =>
-                  setDialog((current) =>
-                    current && current.kind === 'details' ? { ...current, note: event.target.value } : current,
-                  )
-                }
-                placeholder="Описание функции"
-              />
-            </label>
+                {dialog.error ? (
+                  <div className="dialog-feedback dialog-feedback--error">{dialog.error}</div>
+                ) : (
+                  <p className="helper">
+                    Ответ приходит от Python API `genschema` на `{GENSCHEMA_BASE_URL}`.
+                  </p>
+                )}
+              </div>
+            </div>
 
-            <div className="dialog-actions">
-              <button type="button" onClick={closeDialog}>
-                Отмена
-              </button>
-              <button type="submit" className="primary">
-                Сохранить
-              </button>
+            <div className="dialog-actions dialog-actions--spread">
+              <span className="dialog-status">
+                {dialog.isGenerating
+                  ? 'Генерирую схему...'
+                  : dialog.generatedSchema
+                    ? 'Схема готова'
+                    : 'Готов к генерации'}
+              </span>
+              <div className="dialog-actions__buttons">
+                <button type="button" onClick={closeDialog}>
+                  Отмена
+                </button>
+                <button type="submit" className="primary" disabled={dialog.isGenerating}>
+                  {dialog.isGenerating ? 'Генерирую...' : 'Сгенерировать схему'}
+                </button>
+              </div>
             </div>
           </form>
         </DialogShell>

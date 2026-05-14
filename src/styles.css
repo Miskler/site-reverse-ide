@@ -415,12 +415,16 @@ button.is-active {
   z-index: 40;
   display: grid;
   place-items: center;
+  align-content: start;
   padding: 1rem;
   background: rgba(12, 18, 25, 0.42);
+  overflow-y: auto;
 }
 
 .dialog-shell {
   width: min(620px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   border-radius: 16px;
   border: 1px solid rgba(23, 32, 41, 0.14);
   background: #fbf8f3;
@@ -435,6 +439,10 @@ button.is-active {
 
 .dialog-shell--wide {
   width: min(700px, calc(100vw - 2rem));
+}
+
+.dialog-shell--schema {
+  width: min(1080px, calc(100vw - 2rem));
 }
 
 .dialog-shell--color-picker {
@@ -471,6 +479,10 @@ button.is-active {
   gap: 1rem;
 }
 
+.dialog-form--schema {
+  gap: 1rem;
+}
+
 .dialog-form--color-picker {
   gap: 0.9rem;
 }
@@ -480,7 +492,11 @@ button.is-active {
   gap: 0.45rem;
 }
 
-.dialog-field span {
+.dialog-field--code {
+  min-width: 0;
+}
+
+.dialog-field > span {
   color: #41515f;
   font-size: 0.92rem;
   font-weight: 600;
@@ -507,6 +523,161 @@ button.is-active {
 .dialog-field textarea {
   min-height: 140px;
   resize: vertical;
+}
+
+.schema-generator__grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.schema-generator__pane {
+  min-width: 0;
+  padding: 0.95rem;
+  border-radius: 20px;
+  border: 1px solid rgba(23, 32, 41, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.schema-generator__pane .dialog-field {
+  gap: 0.5rem;
+}
+
+.schema-generator__code-mirror {
+  width: 100%;
+  min-width: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(10, 16, 24, 0.18);
+  background: #101726;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.schema-generator__code-mirror .cm-editor {
+  height: 100%;
+  min-height: 320px;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    Menlo,
+    monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  background: transparent;
+}
+
+.schema-generator__code-mirror .cm-scroller {
+  overflow: auto;
+  font: inherit;
+  line-height: inherit;
+}
+
+.schema-generator__code-mirror .cm-content {
+  padding: 0.95rem 1rem;
+  caret-color: #ffffff;
+}
+
+.schema-generator__code-mirror .cm-placeholder {
+  color: rgba(187, 200, 217, 0.66);
+}
+
+.schema-generator__code-mirror .cm-gutters {
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: #91a0ad;
+}
+
+.schema-generator__code-mirror .cm-activeLine,
+.schema-generator__code-mirror .cm-activeLineGutter {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.schema-generator__code-mirror .cm-selectionBackground,
+.schema-generator__code-mirror .cm-content ::selection {
+  background: rgba(76, 137, 255, 0.18) !important;
+}
+
+.schema-generator__code-mirror .cm-tooltip {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #111b2a;
+  color: #edf4ff;
+}
+
+.schema-generator__code-mirror .cm-focused {
+  outline: none;
+}
+
+.schema-generator__code-mirror--output .cm-editor {
+  user-select: text;
+}
+
+.schema-generator__token--property-name {
+  color: #5cc8ff;
+  font-weight: 700;
+}
+
+.schema-generator__token--string {
+  color: #7dffad;
+}
+
+.schema-generator__token--number {
+  color: #ffd166;
+}
+
+.schema-generator__token--boolean {
+  color: #ff8f70;
+}
+
+.schema-generator__token--null {
+  color: #c792ea;
+}
+
+.schema-generator__token--punctuation {
+  color: #e2e8f0;
+}
+
+.dialog-hint {
+  color: #6e7d8a;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.dialog-feedback {
+  padding: 0.8rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  line-height: 1.5;
+}
+
+.dialog-feedback--error {
+  background: rgba(208, 79, 69, 0.08);
+  border-color: rgba(208, 79, 69, 0.16);
+  color: #a14139;
+}
+
+.dialog-status {
+  color: #41515f;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.dialog-actions--spread {
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.dialog-actions__buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+@media (min-width: 900px) {
+  .schema-generator__grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }
 
 .dialog-confirm {
