@@ -104,8 +104,8 @@ export function createNodeDraft(input: {
 }): GraphNode {
   return {
     id: normalizeText(input.id, createId('node')),
-    title: normalizeText(input.title, `Блок ${input.index + 1}`),
-    note: normalizeText(input.note, 'Коротко опиши смысл блока.'),
+    title: normalizeText(input.title, `Элемент ${input.index + 1}`),
+    note: normalizeText(input.note, 'Коротко опиши смысл элемента.'),
     color: normalizeColor(input.color, pickNodeColor(input.index)),
     position: normalizePosition(input.position, {
       x: 120 + input.index * 24,

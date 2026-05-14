@@ -1,4 +1,4 @@
-import {
+﻿import {
   useCallback,
   useEffect,
   useMemo,
@@ -107,7 +107,6 @@ export function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [connectMode, setConnectMode] = useState(false);
   const [statusText, setStatusText] = useState('Загрузка графа...');
   const [statusTone, setStatusTone] = useState<StatusTone>('neutral');
   const [hydrated, setHydrated] = useState(false);
@@ -120,6 +119,7 @@ export function App() {
   const dialogRef = useRef(dialog);
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
+  const connectMode = true;
 
   useEffect(() => {
     dialogRef.current = dialog;
@@ -380,8 +380,8 @@ export function App() {
       type: 'canvasNode',
       position: position ?? getCanvasCenter(),
       data: {
-        title: `Блок ${index + 1}`,
-        note: 'Коротко опиши смысл этого блока.',
+        title: `Элемент ${index + 1}`,
+        note: 'Коротко опиши смысл этого элемента.',
         color: pickNodeColor(index),
         connectMode,
         linkCount: 0,
@@ -399,7 +399,7 @@ export function App() {
     setNodes(nextNodes);
     setSelectedNodeId(newNode.id);
     setSelectedEdgeId(null);
-    scheduleSave(nextNodes, nextEdges, 'Блок добавлен');
+    scheduleSave(nextNodes, nextEdges, 'Элемент добавлен');
   }
 
   function handleAddNodeClick() {
@@ -442,12 +442,28 @@ export function App() {
         : current,
     );
 
-    scheduleSave(nextNodes, edgesRef.current, 'Блок перемещён');
+    scheduleSave(nextNodes, edgesRef.current, 'Элемент перемещён');
     setSelectedNodeId(node.id);
   }
 
   function handleConnect(connection: Connection) {
     if (!connection.source || !connection.target) {
+      return;
+    }
+
+    const existingEdges = edgesRef.current.filter(
+      (edge) => edge.source === connection.source && edge.target === connection.target,
+    );
+
+    if (existingEdges.length > 0) {
+      const nextEdges = edgesRef.current.filter(
+        (edge) => !(edge.source === connection.source && edge.target === connection.target),
+      );
+      setEdges(nextEdges);
+      if (existingEdges.some((edge) => edge.id === selectedEdgeId)) {
+        setSelectedEdgeId(null);
+      }
+      scheduleSave(nodesRef.current, nextEdges, 'Связь сброшена');
       return;
     }
 
@@ -465,7 +481,7 @@ export function App() {
     });
 
     if (!edge) {
-      setStatus('Такая связь уже есть', 'warning');
+      setStatus('Нельзя создать такую связь', 'warning');
       return;
     }
 
@@ -490,7 +506,7 @@ export function App() {
       setSelectedEdgeId(null);
     }
 
-    scheduleSave(nextNodes, nextEdges, 'Блок удалён');
+    scheduleSave(nextNodes, nextEdges, 'Элемент удалён');
   }
 
   function handleDeleteEdge(edgeId: string) {
@@ -627,7 +643,6 @@ export function App() {
   function resetDemo() {
     const nextGraph = createDefaultGraph();
     applyDocument(nextGraph, { selectFirst: true });
-    setConnectMode(false);
     fittedRef.current = false;
     requestAnimationFrame(() => {
       reactFlowInstance?.fitView({
@@ -636,8 +651,8 @@ export function App() {
       });
       fittedRef.current = true;
     });
-    scheduleSave(buildFlowNodes(nextGraph), buildFlowEdges(nextGraph), 'Demo восстановлен');
-    setStatus('Demo восстановлен');
+    scheduleSave(buildFlowNodes(nextGraph), buildFlowEdges(nextGraph), 'Демо восстановлено');
+    setStatus('Демо восстановлено');
   }
 
   function handleSelectionChange({
@@ -669,7 +684,7 @@ export function App() {
     });
 
     setNodes(nextNodes);
-    scheduleSave(nextNodes, edgesRef.current, 'Параметры блока обновлены');
+    scheduleSave(nextNodes, edgesRef.current, 'Параметры элемента обновлены');
   }
 
   const linkCounts = useMemo(() => {
@@ -696,7 +711,7 @@ export function App() {
           onOpenColorPicker: requestOpenNodeColor,
         },
       })),
-    [connectMode, linkCounts, nodes, requestDeleteNode, requestOpenNodeColor, requestOpenNodeDetails],
+    [linkCounts, nodes, requestDeleteNode, requestOpenNodeColor, requestOpenNodeDetails],
   );
 
   const flowEdges: FlowEdge[] = useMemo(() => edges.map((edge) => ({ ...edge })), [edges]);
@@ -706,35 +721,13 @@ export function App() {
       <main className="workspace-shell">
         <div className="canvas-frame" ref={canvasRef} onDoubleClick={handlePaneDoubleClick}>
           <div className="canvas-frame__topbar">
-            <div className="canvas-frame__headline">
-              <div>
-                <p className="canvas-label">Рабочее поле</p>
-                <h2>Связи и блоки</h2>
-              </div>
-              <p className="canvas-frame__hint">
-                Клик по цветной полосе меняет цвет. Двойной клик по карточке открывает редактор.
-              </p>
-            </div>
-
             <div className="canvas-frame__actions">
               <span className={`badge tone-${statusTone}`}>{statusText}</span>
               <span className="canvas-pill">
-                {nodes.length} блоков · {edges.length} связей
+                {nodes.length} элементов · {edges.length} связей
               </span>
               <button className="primary" type="button" onClick={handleAddNodeClick}>
-                Добавить блок
-              </button>
-              <button
-                type="button"
-                className={connectMode ? 'is-active' : ''}
-                aria-pressed={connectMode}
-                onClick={() => {
-                  const nextConnectMode = !connectMode;
-                  setConnectMode(nextConnectMode);
-                  setStatus(nextConnectMode ? 'Режим связи включён' : 'Режим связи выключен');
-                }}
-              >
-                {connectMode ? 'Режим связи: вкл' : 'Режим связи: выкл'}
+                Добавить элемент
               </button>
               <button type="button" className="danger" onClick={requestDeleteSelection}>
                 Удалить выбранное
@@ -768,7 +761,7 @@ export function App() {
               setSelectedEdgeId(null);
             }}
             onConnect={handleConnect}
-            nodesConnectable={connectMode}
+            nodesConnectable
             nodesDraggable
             deleteKeyCode={null}
             panOnDrag
@@ -788,8 +781,7 @@ export function App() {
 
       {dialog?.kind === 'details' ? (
         <DialogShell
-          title="Редактирование блока"
-          description="Измени название и описание блока."
+          title="Редактирование"
           onClose={closeDialog}
           className="dialog-shell--wide"
         >
@@ -814,7 +806,7 @@ export function App() {
                     current && current.kind === 'details' ? { ...current, title: event.target.value } : current,
                   )
                 }
-                placeholder="Название блока"
+                placeholder="Название"
                 autoFocus
               />
             </label>
@@ -829,22 +821,9 @@ export function App() {
                     current && current.kind === 'details' ? { ...current, note: event.target.value } : current,
                   )
                 }
-                placeholder="Коротко опиши смысл блока"
+                placeholder="Описание"
               />
             </label>
-
-            <div className="dialog-meta">
-              <div>
-                <span className="dialog-meta__label">ID</span>
-                <strong>{dialog.nodeId}</strong>
-              </div>
-              <div>
-                <span className="dialog-meta__label">Позиция</span>
-                <strong>
-                  {Math.round(nodesRef.current.find((node) => node.id === dialog.nodeId)?.position.x ?? 0)}, {Math.round(nodesRef.current.find((node) => node.id === dialog.nodeId)?.position.y ?? 0)}
-                </strong>
-              </div>
-            </div>
 
             <div className="dialog-actions">
               <button type="button" onClick={closeDialog}>
@@ -860,8 +839,7 @@ export function App() {
 
       {dialog?.kind === 'color' ? (
         <DialogShell
-          title="Палитра цвета"
-          description=""
+          title="Цвет"
           onClose={closeDialog}
           className="dialog-shell--wide dialog-shell--color-picker"
         >
@@ -901,15 +879,14 @@ export function App() {
 
       {dialog?.kind === 'confirm-delete' ? (
         <DialogShell
-          title="Подтверждение удаления"
-          description="Удаление нельзя будет отменить."
+          title="Удаление"
           onClose={closeDialog}
           className="dialog-shell--compact"
         >
           <div className="dialog-confirm">
             <p>
               {dialog.target === 'node'
-                ? `Удалить блок «${dialog.label}»? Он также удалит все связанные связи.`
+                ? `Удалить элемент «${dialog.label}»? Связи тоже удалятся.`
                 : `Удалить связь «${dialog.label}»?`}
             </p>
           </div>
@@ -930,20 +907,16 @@ export function App() {
 
 function DialogShell({
   title,
-  description,
   onClose,
   children,
   className,
 }: {
   title: string;
-  description?: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
 }) {
   const titleId = useId();
-  const descriptionId = useId();
-  const hasDescription = Boolean(description?.trim());
 
   return (
     <div
@@ -958,17 +931,12 @@ function DialogShell({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={hasDescription ? descriptionId : undefined}
         onMouseDown={(event) => {
           event.stopPropagation();
         }}
       >
         <div className="dialog-shell__header">
-          <div>
-            <p className="dialog-shell__eyebrow">Редактор</p>
-            <h3 id={titleId}>{title}</h3>
-            {hasDescription ? <p id={descriptionId}>{description}</p> : null}
-          </div>
+          <h3 id={titleId}>{title}</h3>
           <button type="button" className="dialog-shell__close" aria-label="Закрыть окно" onClick={onClose}>
             ×
           </button>
@@ -985,8 +953,9 @@ function formatEdgeLabel(nodes: CanvasNodeType[], edge: FlowEdge) {
   const target = nodes.find((node) => node.id === edge.target);
 
   if (!source || !target) {
-    return 'Связь: один из блоков уже удалён';
+    return 'Связь: один из элементов уже удалён';
   }
 
   return `Связь: ${source.data.title} → ${target.data.title}`;
 }
+

@@ -16,7 +16,7 @@ export type CanvasNodeType = Node<CanvasNodeData, 'canvasNode'>;
 
 export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   const title = data.title.trim() || 'Без названия';
-  const note = data.note.trim() || 'Добавь краткое описание блока.';
+  const note = data.note.trim() || 'Добавь краткое описание элемента.';
 
   return (
     <article
@@ -31,7 +31,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
       <button
         type="button"
         className="graph-node__color-strip nodrag nopan"
-        aria-label={`Изменить цвет блока ${title}`}
+        aria-label={`Изменить цвет элемента ${title}`}
         title="Изменить цвет"
         onClick={(event) => {
           event.preventDefault();
@@ -53,12 +53,11 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
       />
 
       <div className="graph-node__chrome">
-        <span className="graph-node__tag">Блок</span>
         <button
           type="button"
           className="graph-node__delete nodrag nopan"
-          aria-label={`Удалить блок ${title}`}
-          title="Удалить блок"
+          aria-label={`Удалить элемент ${title}`}
+          title="Удалить элемент"
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -77,11 +76,6 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
         <h3>{title}</h3>
         <p>{note}</p>
       </div>
-
-      <footer className="graph-node__footer">
-        <span>{data.connectMode ? 'Тяни за маркер для связи' : 'Перетаскивай для движения'}</span>
-        <span>{data.linkCount} связ.</span>
-      </footer>
 
       <Handle
         type="source"
