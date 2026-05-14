@@ -1,30 +1,82 @@
 # Canvas Links
 
-Редактор блоков и связей на React, React Flow, Fastify и TypeScript. Python больше не нужен.
+Node app for editing function cards and links, plus a side-by-side Python REST API for the `genschema` library.
 
-## Запуск
+## Node app
 
 ```bash
 npm install
 npm run dev
 ```
 
-В режиме разработки фронтенд доступен на `http://127.0.0.1:5173`, а API - на `http://127.0.0.1:3001`.
+Development:
 
-## Production-сборка
+- UI: `http://127.0.0.1:5173`
+- Node API: `http://127.0.0.1:3001`
+
+Production:
 
 ```bash
 npm run build
 npm start
 ```
 
-После сборки приложение открывается на `http://127.0.0.1:3000`.
+Production UI:
 
-## Что умеет
+- `http://127.0.0.1:3000`
 
-- Добавлять блоки в точке клика или по кнопке.
-- Перетаскивать блоки мышью.
-- Создавать связи в режиме соединения.
-- Редактировать название, описание и цвет выбранного блока.
-- Удалять блоки и связи.
-- Сохранять граф в JSON-файл на сервере и в `localStorage` как резервную копию.
+## Python genschema API
+
+The Python server wraps the real [`genschema`](https://pypi.org/project/genschema/) package and exposes it over REST.
+
+Install dependencies:
+
+```bash
+pip install -r python-server/requirements.txt
+```
+
+Run the server:
+
+```bash
+python python-server/genschema_server.py
+```
+
+Or:
+
+```bash
+npm run py:genschema
+```
+
+Default address:
+
+- `http://127.0.0.1:8000`
+
+Endpoints:
+
+- `GET /api/health`
+- `GET /api/genschema`
+- `POST /api/genschema`
+- `POST /api/genschema/postprocess`
+
+Example request:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/genschema \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_of": "anyOf",
+    "pseudo_array": true,
+    "documents": [
+      { "name": "Alice", "email": "alice@example.com" },
+      { "name": "Bob", "email": "bob@example.com" }
+    ],
+    "use_default_comparators": true
+  }'
+```
+
+The server accepts:
+
+- `inputs`, `documents`, or `items` as the input array
+- `kind: "json"` or `kind: "schema"` wrappers for explicit input types
+- optional comparator configuration for `FormatComparator`, `EnumComparator`, `RequiredComparator`, `EmptyComparator`, `DeleteElement`, `NoAdditionalProperties`, `PreserveCommonKeywordsComparator`, and `SchemaVersionComparator`
+- optional reference postprocessing via `SchemaReferencePostprocessor`

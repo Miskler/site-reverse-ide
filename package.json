@@ -7,7 +7,8 @@
     "dev": "concurrently -k -n API,WEB -c cyan,magenta \"cross-env NODE_ENV=development PORT=3001 tsx watch server/index.ts\" \"vite --port 5173\"",
     "build": "vite build",
     "start": "cross-env NODE_ENV=production PORT=3000 tsx server/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "py:genschema": "python python-server/genschema_server.py"
   },
   "dependencies": {
     "@fastify/static": "^9.1.3",
