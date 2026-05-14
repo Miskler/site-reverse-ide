@@ -1,5 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { HTTP_METHODS, type GraphNode, type HttpMethod } from '../shared/graph';
 
 type CanvasNodePatch = Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color'>>;
@@ -46,14 +46,17 @@ function measureTitleWidth(text: string): number {
 }
 
 export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
-  const title = data.title.trim() || 'Без названия';
+  const [isTitleFocused, setIsTitleFocused] = useState(false);
+  const titleText = data.title.trim();
+  const title = titleText || 'Без названия';
+  const titleValue = isTitleFocused ? data.title : title;
   const nodeWidth = useMemo(() => {
-    const titleWidth = measureTitleWidth(title);
+    const titleWidth = measureTitleWidth(titleValue);
     return Math.max(
       NODE_MIN_WIDTH,
       Math.min(NODE_MAX_WIDTH, Math.ceil(titleWidth + NODE_CHROME_WIDTH + NODE_TEXT_BUFFER)),
     );
-  }, [title]);
+  }, [titleValue]);
 
   return (
     <article
@@ -112,9 +115,14 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
         <input
           type="text"
           className="graph-node__title-input nodrag nopan"
-          value={data.title}
+          value={titleValue}
           aria-label={`Название функции ${title}`}
           placeholder="Название функции"
+          onFocus={() => setIsTitleFocused(true)}
+          onBlur={() => {
+            setIsTitleFocused(false);
+            data.onUpdateNode(id, { title: data.title.trim() || 'Без названия' });
+          }}
           onChange={(event) => {
             data.onUpdateNode(id, { title: event.target.value });
           }}

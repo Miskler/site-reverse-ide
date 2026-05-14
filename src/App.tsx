@@ -697,7 +697,7 @@ export function App() {
         data: {
           ...node.data,
           method: patch.method !== undefined ? normalizeHttpMethod(patch.method, node.data.method) : node.data.method,
-          title: patch.title !== undefined ? patch.title.trim() || 'Без названия' : node.data.title,
+          title: patch.title !== undefined ? patch.title : node.data.title,
           note: patch.note !== undefined ? patch.note : node.data.note,
           color: patch.color !== undefined ? patch.color : node.data.color,
         },
@@ -813,7 +813,7 @@ export function App() {
               event.preventDefault();
               updateNodeById(dialog.nodeId, {
                 method: dialog.method,
-                title: dialog.title,
+                title: dialog.title.trim() || 'Без названия',
                 note: dialog.note,
               });
               closeDialog();
