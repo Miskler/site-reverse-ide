@@ -118,6 +118,7 @@ export function App() {
   const [dialog, setDialog] = useState<DialogState>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
+  const saveRequestIdRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
   const fittedRef = useRef(false);
   const dialogRef = useRef(dialog);
@@ -351,6 +352,7 @@ export function App() {
   function scheduleSave(nextNodes: CanvasNodeType[], nextEdges: FlowEdge[], message: string, tone: StatusTone = 'success') {
     const document = composeDocument(nextNodes, nextEdges);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(document));
+    const saveRequestId = ++saveRequestIdRef.current;
 
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
@@ -359,9 +361,17 @@ export function App() {
     saveTimerRef.current = window.setTimeout(async () => {
       try {
         const saved = sanitizeGraphDocument(await api.saveGraph(document));
-        applyDocument(saved, { preserveSelection: true });
+        if (saveRequestId !== saveRequestIdRef.current) {
+          return;
+        }
+
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
         setStatus(message, tone);
       } catch (error) {
+        if (saveRequestId !== saveRequestIdRef.current) {
+          return;
+        }
+
         console.warn('Save failed', error);
         setStatus('Сохранил в браузере, сервер пока недоступен', 'warning');
       }

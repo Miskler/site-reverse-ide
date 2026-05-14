@@ -1,5 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import type { CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { HTTP_METHODS, type GraphNode, type HttpMethod } from '../shared/graph';
 
 type CanvasNodePatch = Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color'>>;
@@ -19,13 +19,46 @@ export interface CanvasNodeData extends Record<string, unknown> {
 
 export type CanvasNodeType = Node<CanvasNodeData, 'canvasNode'>;
 
+const TITLE_MEASURE_FONT = '400 16px "Aktsident Grotesk AG", "Manrope", "Segoe UI", sans-serif';
+const NODE_MIN_WIDTH = 260;
+const NODE_MAX_WIDTH = 720;
+const NODE_CHROME_WIDTH = 172;
+const NODE_TEXT_BUFFER = 48;
+
+let measurementContext: CanvasRenderingContext2D | null = null;
+
+function measureTitleWidth(text: string): number {
+  if (typeof document === 'undefined') {
+    return text.length * 10;
+  }
+
+  if (!measurementContext) {
+    const canvas = document.createElement('canvas');
+    measurementContext = canvas.getContext('2d');
+  }
+
+  if (!measurementContext) {
+    return text.length * 10;
+  }
+
+  measurementContext.font = TITLE_MEASURE_FONT;
+  return measurementContext.measureText(text).width;
+}
+
 export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   const title = data.title.trim() || 'Без названия';
+  const nodeWidth = useMemo(() => {
+    const titleWidth = measureTitleWidth(title);
+    return Math.max(
+      NODE_MIN_WIDTH,
+      Math.min(NODE_MAX_WIDTH, Math.ceil(titleWidth + NODE_CHROME_WIDTH + NODE_TEXT_BUFFER)),
+    );
+  }, [title]);
 
   return (
     <article
       className={`graph-node${selected ? ' is-selected' : ''}`}
-      style={{ '--node-color': data.color } as CSSProperties}
+      style={{ '--node-color': data.color, '--node-width': `${nodeWidth}px` } as CSSProperties}
       onDoubleClick={(event) => {
         event.preventDefault();
         event.stopPropagation();

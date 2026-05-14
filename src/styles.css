@@ -709,7 +709,8 @@ button.is-active {
 
 .graph-node {
   position: relative;
-  width: min(280px, calc(100vw - 120px));
+  width: var(--node-width, min(280px, calc(100vw - 120px)));
+  max-width: calc(100vw - 120px);
   min-height: 144px;
   padding: 0.95rem 0.95rem 0.95rem 1.2rem;
   border-radius: 14px;
