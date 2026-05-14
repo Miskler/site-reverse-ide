@@ -21,16 +21,19 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import {
+  HTTP_METHODS,
   STORAGE_KEY,
   createDefaultGraph,
   createEdgeDraft,
   createId,
   createNodeDraft,
   pickNodeColor,
+  normalizeHttpMethod,
   sanitizeGraphDocument,
   type GraphDocument,
   type GraphEdge,
   type GraphNode,
+  type HttpMethod,
 } from './shared/graph';
 import { CanvasEdge } from './components/CanvasEdge';
 import { ColorPicker } from './components/ColorPicker';
@@ -44,6 +47,7 @@ type DialogState =
   | {
       kind: 'details';
       nodeId: string;
+      method: HttpMethod;
       title: string;
       note: string;
     }
@@ -271,6 +275,7 @@ export function App() {
       version: 2,
       nodes: nextNodes.map((node) => ({
         id: node.id,
+        method: node.data.method,
         title: node.data.title,
         note: node.data.note,
         color: node.data.color,
@@ -299,6 +304,7 @@ export function App() {
       type: 'canvasNode',
       position: node.position,
       data: {
+        method: node.method,
         title: node.title,
         note: node.note,
         color: node.color,
@@ -307,6 +313,7 @@ export function App() {
         onRequestDelete: requestDeleteNode,
         onOpenEditor: requestOpenNodeDetails,
         onOpenColorPicker: requestOpenNodeColor,
+        onUpdateNode: updateNodeById,
       },
       draggable: true,
       selectable: true,
@@ -380,14 +387,16 @@ export function App() {
       type: 'canvasNode',
       position: position ?? getCanvasCenter(),
       data: {
-        title: `Элемент ${index + 1}`,
-        note: 'Коротко опиши смысл этого элемента.',
+        method: HTTP_METHODS[0],
+        title: `Функция ${index + 1}`,
+        note: 'Коротко опиши назначение функции.',
         color: pickNodeColor(index),
         connectMode,
         linkCount: 0,
         onRequestDelete: requestDeleteNode,
         onOpenEditor: requestOpenNodeDetails,
         onOpenColorPicker: requestOpenNodeColor,
+        onUpdateNode: updateNodeById,
       },
       draggable: true,
       selectable: true,
@@ -399,7 +408,7 @@ export function App() {
     setNodes(nextNodes);
     setSelectedNodeId(newNode.id);
     setSelectedEdgeId(null);
-    scheduleSave(nextNodes, nextEdges, 'Элемент добавлен');
+    scheduleSave(nextNodes, nextEdges, 'Функция добавлена');
   }
 
   function handleAddNodeClick() {
@@ -442,7 +451,7 @@ export function App() {
         : current,
     );
 
-    scheduleSave(nextNodes, edgesRef.current, 'Элемент перемещён');
+    scheduleSave(nextNodes, edgesRef.current, 'Функция перемещена');
     setSelectedNodeId(node.id);
   }
 
@@ -506,7 +515,7 @@ export function App() {
       setSelectedEdgeId(null);
     }
 
-    scheduleSave(nextNodes, nextEdges, 'Элемент удалён');
+    scheduleSave(nextNodes, nextEdges, 'Функция удалена');
   }
 
   function handleDeleteEdge(edgeId: string) {
@@ -532,6 +541,7 @@ export function App() {
     setDialog({
       kind: 'details',
       nodeId,
+      method: node.data.method,
       title: node.data.title,
       note: node.data.note,
     });
@@ -666,7 +676,7 @@ export function App() {
     setSelectedEdgeId(selectedEdges[0]?.id ?? null);
   }
 
-  function updateNodeById(nodeId: string, patch: Partial<Pick<GraphNode, 'title' | 'note' | 'color'>>) {
+  function updateNodeById(nodeId: string, patch: Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color'>>) {
     const nextNodes = nodesRef.current.map((node) => {
       if (node.id !== nodeId) {
         return node;
@@ -676,6 +686,7 @@ export function App() {
         ...node,
         data: {
           ...node.data,
+          method: patch.method !== undefined ? normalizeHttpMethod(patch.method, node.data.method) : node.data.method,
           title: patch.title !== undefined ? patch.title.trim() || 'Без названия' : node.data.title,
           note: patch.note !== undefined ? patch.note : node.data.note,
           color: patch.color !== undefined ? patch.color : node.data.color,
@@ -684,7 +695,7 @@ export function App() {
     });
 
     setNodes(nextNodes);
-    scheduleSave(nextNodes, edgesRef.current, 'Параметры элемента обновлены');
+    scheduleSave(nextNodes, edgesRef.current, 'Параметры функции обновлены');
   }
 
   const linkCounts = useMemo(() => {
@@ -709,9 +720,10 @@ export function App() {
           onRequestDelete: requestDeleteNode,
           onOpenEditor: requestOpenNodeDetails,
           onOpenColorPicker: requestOpenNodeColor,
+          onUpdateNode: updateNodeById,
         },
       })),
-    [linkCounts, nodes, requestDeleteNode, requestOpenNodeColor, requestOpenNodeDetails],
+    [linkCounts, nodes, requestDeleteNode, requestOpenNodeColor, requestOpenNodeDetails, updateNodeById],
   );
 
   const flowEdges: FlowEdge[] = useMemo(() => edges.map((edge) => ({ ...edge })), [edges]);
@@ -721,13 +733,13 @@ export function App() {
       <main className="workspace-shell">
         <div className="canvas-frame" ref={canvasRef} onDoubleClick={handlePaneDoubleClick}>
           <div className="canvas-frame__topbar">
-            <div className="canvas-frame__actions">
+          <div className="canvas-frame__actions">
               <span className={`badge tone-${statusTone}`}>{statusText}</span>
               <span className="canvas-pill">
-                {nodes.length} элементов · {edges.length} связей
+                {nodes.length} функций · {edges.length} связей
               </span>
               <button className="primary" type="button" onClick={handleAddNodeClick}>
-                Добавить элемент
+                Добавить функцию
               </button>
               <button type="button" className="danger" onClick={requestDeleteSelection}>
                 Удалить выбранное
@@ -781,7 +793,7 @@ export function App() {
 
       {dialog?.kind === 'details' ? (
         <DialogShell
-          title="Редактирование"
+          title="Редактирование функции"
           onClose={closeDialog}
           className="dialog-shell--wide"
         >
@@ -790,6 +802,7 @@ export function App() {
             onSubmit={(event) => {
               event.preventDefault();
               updateNodeById(dialog.nodeId, {
+                method: dialog.method,
                 title: dialog.title,
                 note: dialog.note,
               });
@@ -797,7 +810,27 @@ export function App() {
             }}
           >
             <label className="dialog-field">
-              <span>Название</span>
+              <span>Метод</span>
+              <select
+                value={dialog.method}
+                onChange={(event) =>
+                  setDialog((current) =>
+                    current && current.kind === 'details'
+                      ? { ...current, method: normalizeHttpMethod(event.target.value, current.method) }
+                      : current,
+                  )
+                }
+              >
+                {HTTP_METHODS.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="dialog-field">
+              <span>Функция</span>
               <input
                 type="text"
                 value={dialog.title}
@@ -806,7 +839,7 @@ export function App() {
                     current && current.kind === 'details' ? { ...current, title: event.target.value } : current,
                   )
                 }
-                placeholder="Название"
+                placeholder="Название функции"
                 autoFocus
               />
             </label>
@@ -821,7 +854,7 @@ export function App() {
                     current && current.kind === 'details' ? { ...current, note: event.target.value } : current,
                   )
                 }
-                placeholder="Описание"
+                placeholder="Описание функции"
               />
             </label>
 
@@ -886,7 +919,7 @@ export function App() {
           <div className="dialog-confirm">
             <p>
               {dialog.target === 'node'
-                ? `Удалить элемент «${dialog.label}»? Связи тоже удалятся.`
+                ? `Удалить функцию «${dialog.label}»? Связи тоже удалятся.`
                 : `Удалить связь «${dialog.label}»?`}
             </p>
           </div>
@@ -953,7 +986,7 @@ function formatEdgeLabel(nodes: CanvasNodeType[], edge: FlowEdge) {
   const target = nodes.find((node) => node.id === edge.target);
 
   if (!source || !target) {
-    return 'Связь: один из элементов уже удалён';
+    return 'Связь: одна из функций уже удалена';
   }
 
   return `Связь: ${source.data.title} → ${target.data.title}`;

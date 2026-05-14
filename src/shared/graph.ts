@@ -1,6 +1,9 @@
 export const GRAPH_VERSION = 2;
 export const STORAGE_KEY = 'site-reverse-ide:graph-v2';
 
+export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
+export type HttpMethod = (typeof HTTP_METHODS)[number];
+
 export const DEFAULT_NODE_COLORS = [
   '#2f8f83',
   '#ef7d57',
@@ -18,6 +21,7 @@ export interface GraphPosition {
 
 export interface GraphNode {
   id: string;
+  method: HttpMethod;
   title: string;
   note: string;
   color: string;
@@ -81,6 +85,15 @@ export function normalizeColor(value: unknown, fallback = DEFAULT_NODE_COLORS[0]
   return text;
 }
 
+export function normalizeHttpMethod(value: unknown, fallback: HttpMethod = 'GET'): HttpMethod {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const method = value.trim().toUpperCase();
+  return (HTTP_METHODS as readonly string[]).includes(method) ? (method as HttpMethod) : fallback;
+}
+
 export function normalizePosition(
   value: unknown,
   fallback: GraphPosition = { x: 0, y: 0 },
@@ -96,6 +109,7 @@ export function normalizePosition(
 
 export function createNodeDraft(input: {
   id?: string;
+  method?: unknown;
   title?: unknown;
   note?: unknown;
   color?: unknown;
@@ -104,8 +118,9 @@ export function createNodeDraft(input: {
 }): GraphNode {
   return {
     id: normalizeText(input.id, createId('node')),
-    title: normalizeText(input.title, `Элемент ${input.index + 1}`),
-    note: normalizeText(input.note, 'Коротко опиши смысл элемента.'),
+    method: normalizeHttpMethod(input.method),
+    title: normalizeText(input.title, `Функция ${input.index + 1}`),
+    note: normalizeText(input.note, 'Коротко опиши назначение функции.'),
     color: normalizeColor(input.color, pickNodeColor(input.index)),
     position: normalizePosition(input.position, {
       x: 120 + input.index * 24,
@@ -158,24 +173,27 @@ export function createDefaultGraph(): GraphDocument {
     nodes: [
       createNodeDraft({
         id: 'node-start',
-        title: 'Идея',
-        note: 'Исходная мысль, задача или рабочая гипотеза.',
+        method: 'GET',
+        title: 'Список',
+        note: 'Читает данные и возвращает список.',
         color: '#2f8f83',
         position: { x: 140, y: 140 },
         index: 0,
       }),
       createNodeDraft({
         id: 'node-middle',
-        title: 'Разбор',
-        note: 'Промежуточный шаг, зависимость или черновик.',
+        method: 'POST',
+        title: 'Создание',
+        note: 'Создаёт новую запись или запускает действие.',
         color: '#ef7d57',
         position: { x: 468, y: 274 },
         index: 1,
       }),
       createNodeDraft({
         id: 'node-end',
-        title: 'Результат',
-        note: 'Финальный вывод, который должен получиться.',
+        method: 'PATCH',
+        title: 'Обновление',
+        note: 'Меняет существующее состояние и возвращает результат.',
         color: '#d9a441',
         position: { x: 806, y: 156 },
         index: 2,
@@ -219,6 +237,7 @@ export function sanitizeGraphDocument(input: unknown): GraphDocument {
     nodes.push(
       createNodeDraft({
         id,
+        method: rawNode.method,
         title: rawNode.title,
         note: rawNode.note,
         color: rawNode.color,

@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import {
+  HTTP_METHODS,
   GRAPH_VERSION,
   normalizeColor,
+  normalizeHttpMethod,
   normalizePosition,
   normalizeText,
   type GraphDocument,
@@ -19,6 +21,7 @@ const positionSchema = z
 const nodeSchema = z
   .object({
     id: z.string().trim().min(1),
+    method: z.enum(HTTP_METHODS).optional(),
     title: z.string(),
     note: z.string(),
     color: z.string(),
@@ -63,6 +66,7 @@ export function parseGraphDocument(input: unknown): GraphDocument {
     nodeIds.add(node.id);
     return {
       id: node.id,
+      method: normalizeHttpMethod(node.method),
       title: normalizeText(node.title, 'Без названия'),
       note: normalizeText(node.note, ''),
       color: normalizeColor(node.color),
