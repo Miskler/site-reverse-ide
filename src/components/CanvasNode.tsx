@@ -26,6 +26,7 @@ const NODE_MAX_WIDTH = 720;
 const METHOD_TRIGGER_EXTRA = 48;
 const NODE_CHROME_WIDTH = 80;
 const NODE_TEXT_BUFFER = 34;
+const STORAGE_METHODS = new Set<HttpMethod>(['localStorage', 'cookies', 'sessionStorage']);
 
 let measurementContext: CanvasRenderingContext2D | null = null;
 
@@ -59,6 +60,8 @@ function MethodItem({ method }: { method: HttpMethod }) {
 function MethodSelectContent() {
   const { zoom } = useViewport();
   const selectScale = Math.max(zoom, 0.1);
+  const methodItems = HTTP_METHODS.filter((method) => !STORAGE_METHODS.has(method));
+  const storageItems = HTTP_METHODS.filter((method) => STORAGE_METHODS.has(method));
 
   return (
     <Select.Content
@@ -69,9 +72,21 @@ function MethodSelectContent() {
       style={{ '--graph-zoom': `${selectScale}` } as CSSProperties}
     >
       <Select.Viewport className="graph-node__method-viewport">
-        {HTTP_METHODS.map((method) => (
-          <MethodItem key={method} method={method} />
-        ))}
+        <Select.Group className="graph-node__method-group">
+          <Select.Label className="graph-node__method-label">Methods</Select.Label>
+          {methodItems.map((method) => (
+            <MethodItem key={method} method={method} />
+          ))}
+        </Select.Group>
+
+        <Select.Separator className="graph-node__method-separator" />
+
+        <Select.Group className="graph-node__method-group">
+          <Select.Label className="graph-node__method-label">Storages</Select.Label>
+          {storageItems.map((method) => (
+            <MethodItem key={method} method={method} />
+          ))}
+        </Select.Group>
       </Select.Viewport>
     </Select.Content>
   );
