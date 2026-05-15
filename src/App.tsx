@@ -59,9 +59,6 @@ type DialogState =
       nodeId: string;
       rawJsons: string[];
       activeSourceIndex: number;
-      generatedSchema: string;
-      error: string | null;
-      isGenerating: boolean;
     }
   | {
       kind: 'color';
@@ -162,47 +159,7 @@ const JSON_INPUT_EXTENSIONS = [
   }),
 ];
 
-const JSON_OUTPUT_EXTENSIONS = JSON_BASE_EXTENSIONS;
 const SCHEMA_EDITOR_HEIGHT = 'clamp(320px, 45vh, 520px)';
-
-const DEFAULT_GENSCHEMA_BASE_URL = 'http://127.0.0.1:8000';
-const configuredGenschemaBaseUrl = import.meta.env.VITE_GENSCHEMA_URL?.trim();
-const GENSCHEMA_API_URL = (() => {
-  try {
-    return new URL('/api/genschema', configuredGenschemaBaseUrl || DEFAULT_GENSCHEMA_BASE_URL).toString();
-  } catch {
-    return new URL('/api/genschema', DEFAULT_GENSCHEMA_BASE_URL).toString();
-  }
-})();
-const GENSCHEMA_BASE_URL = new URL(GENSCHEMA_API_URL).origin;
-
-type GenschemaResponse = {
-  schema: unknown;
-  meta?: {
-    inputs?: number;
-    comparators?: string[];
-    base_of?: string;
-    pseudo_array?: boolean;
-    postprocessed?: boolean;
-  };
-};
-
-function formatGeneratedSchema(schema: unknown): string {
-  if (typeof schema === 'string') {
-    const trimmed = schema.trim();
-    if (!trimmed) {
-      return '';
-    }
-
-    try {
-      return JSON.stringify(JSON.parse(trimmed), null, 2);
-    } catch {
-      return schema;
-    }
-  }
-
-  return JSON.stringify(schema, null, 2);
-}
 
 function formatSourceCount(count: number): string {
   const mod10 = count % 10;
@@ -243,26 +200,6 @@ const api = {
 
     return response.json();
   },
-  async generateSchema(documents: unknown[]): Promise<GenschemaResponse> {
-    const response = await fetch(GENSCHEMA_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        documents,
-        use_default_comparators: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { error?: string; detail?: string };
-      throw new Error(payload.error || payload.detail || `Failed to generate schema (${response.status})`);
-    }
-
-    return response.json() as Promise<GenschemaResponse>;
-  },
   async saveGraph(graph: GraphDocument): Promise<GraphDocument> {
     const response = await fetch('/api/graph', {
       method: 'POST',
@@ -295,14 +232,12 @@ export function App() {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const saveRequestIdRef = useRef(0);
-  const schemaGenerationRequestRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
   const fittedRef = useRef(false);
   const dialogRef = useRef(dialog);
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   const connectMode = true;
-  const schemaGeneratorNodeId = dialog?.kind === 'schema-generator' ? dialog.nodeId : null;
 
   useEffect(() => {
     dialogRef.current = dialog;
@@ -315,16 +250,6 @@ export function App() {
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
-
-  useEffect(() => {
-    if (dialog?.kind !== 'schema-generator') {
-      return;
-    }
-
-    return () => {
-      schemaGenerationRequestRef.current += 1;
-    };
-  }, [schemaGeneratorNodeId]);
 
   useEffect(() => {
     void loadInitialGraph();
@@ -765,9 +690,6 @@ export function App() {
       nodeId,
       rawJsons,
       activeSourceIndex: 0,
-      generatedSchema: '',
-      error: null,
-      isGenerating: false,
     });
   }, []);
 
@@ -855,8 +777,6 @@ export function App() {
     const current = dialogRef.current;
     if (current?.kind === 'color') {
       previewNodeColor(current.nodeId, current.originalColor);
-    } else if (current?.kind === 'schema-generator') {
-      persistSchemaGeneratorRawJsons();
     }
 
     setDialog(null);
@@ -870,8 +790,6 @@ export function App() {
             rawJsons: current.rawJsons.map((value, currentIndex) =>
               currentIndex === index ? rawJson : value,
             ),
-            generatedSchema: '',
-            error: null,
         }
         : current,
     );
@@ -884,8 +802,6 @@ export function App() {
             ...current,
             rawJsons: [...current.rawJsons, ''],
             activeSourceIndex: current.rawJsons.length,
-            generatedSchema: '',
-            error: null,
           }
         : current,
     );
@@ -904,8 +820,6 @@ export function App() {
         ...current,
         rawJsons: nextRawJsons,
         activeSourceIndex: nextActiveIndex,
-        generatedSchema: '',
-        error: null,
       };
     });
   }
@@ -921,7 +835,7 @@ export function App() {
     );
   }
 
-  function persistSchemaGeneratorRawJsons() {
+  function saveSchemaGeneratorRawJsons() {
     const current = dialogRef.current;
     if (!current || current.kind !== 'schema-generator') {
       return;
@@ -929,87 +843,14 @@ export function App() {
 
     const node = nodesRef.current.find((candidate) => candidate.id === current.nodeId);
     if (!node || JSON.stringify(node.data.rawJsons) === JSON.stringify(current.rawJsons)) {
+      setDialog(null);
+      setStatus('Источники JSON сохранены', 'success');
       return;
     }
 
     updateNodeById(current.nodeId, { rawJsons: current.rawJsons });
-  }
-
-  async function generateSchemaFromRawJsons() {
-    const current = dialogRef.current;
-    if (!current || current.kind !== 'schema-generator') {
-      return;
-    }
-
-    persistSchemaGeneratorRawJsons();
-
-    const parsedSamples: unknown[] = [];
-
-    for (const [index, rawJson] of current.rawJsons.entries()) {
-      try {
-        parsedSamples.push(JSON.parse(rawJson));
-      } catch {
-        setDialog((dialogState) =>
-          dialogState && dialogState.kind === 'schema-generator'
-            ? {
-                ...dialogState,
-                error: `Источник ${index + 1} должен быть валидным JSON. Исправь синтаксис и попробуй снова.`,
-                isGenerating: false,
-              }
-            : dialogState,
-        );
-        setStatus('JSON нужно исправить перед генерацией', 'warning');
-        return;
-      }
-    }
-
-    const requestId = ++schemaGenerationRequestRef.current;
-
-    setDialog((dialogState) =>
-      dialogState && dialogState.kind === 'schema-generator'
-        ? {
-            ...dialogState,
-            error: null,
-            isGenerating: true,
-          }
-        : dialogState,
-    );
-
-    try {
-      const response = await api.generateSchema(parsedSamples);
-      if (schemaGenerationRequestRef.current !== requestId) {
-        return;
-      }
-
-      const formattedSchema = formatGeneratedSchema(response.schema);
-      setDialog((dialogState) =>
-        dialogState && dialogState.kind === 'schema-generator'
-          ? {
-              ...dialogState,
-              generatedSchema: formattedSchema,
-              error: null,
-              isGenerating: false,
-            }
-          : dialogState,
-      );
-      setStatus('Схема сгенерирована через Python backend', 'success');
-    } catch (error) {
-      if (schemaGenerationRequestRef.current !== requestId) {
-        return;
-      }
-
-      const message = error instanceof Error ? error.message : 'Не удалось сгенерировать схему';
-      setDialog((dialogState) =>
-        dialogState && dialogState.kind === 'schema-generator'
-          ? {
-              ...dialogState,
-              error: message,
-              isGenerating: false,
-            }
-          : dialogState,
-      );
-      setStatus(message, 'warning');
-    }
+    setDialog(null);
+    setStatus('Источники JSON сохранены', 'success');
   }
 
   function requestDeleteSelection() {
@@ -1175,22 +1016,25 @@ export function App() {
       </main>
 
       {dialog?.kind === 'schema-generator' ? (
-        <DialogShell title="Генератор схемы JSON" onClose={closeDialog} className="dialog-shell--schema">
-          <form
-            className="dialog-form dialog-form--schema"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void generateSchemaFromRawJsons();
-            }}
-          >
+        <DialogShell title="Источники JSON" onClose={closeDialog} className="dialog-shell--schema">
+          <div className="dialog-form dialog-form--schema">
+            <div className="dialog-lead">
+              <p className="dialog-hint">
+                Выбирай источник слева, редактируй JSON справа. Можно хранить несколько вариантов
+                и сохранить их одним действием.
+              </p>
+            </div>
+
             <div className="schema-generator__grid">
-              <div className="dialog-field dialog-field--code schema-generator__pane">
+              <section className="dialog-field dialog-field--code schema-generator__pane schema-generator__pane--sources">
                 <div className="schema-generator__pane-header">
-                  <span>Источники JSON</span>
+                  <div>
+                    <span>Источники</span>
+                    <p className="schema-generator__pane-note">
+                      {formatSourceCount(dialog.rawJsons.length)} в этой карточке.
+                    </p>
+                  </div>
                   <div className="schema-generator__pane-actions">
-                    <span className="schema-generator__source-count">
-                      {formatSourceCount(dialog.rawJsons.length)}
-                    </span>
                     <button type="button" onClick={addSchemaGeneratorRawJson}>
                       Добавить
                     </button>
@@ -1205,8 +1049,7 @@ export function App() {
                     >
                       <button
                         type="button"
-                        role="tab"
-                        aria-selected={index === dialog.activeSourceIndex}
+                        aria-pressed={index === dialog.activeSourceIndex}
                         className="schema-generator__source-card-main"
                         onClick={() => setSchemaGeneratorActiveSource(index)}
                         title={rawJson.trim() || `Источник ${index + 1}`}
@@ -1241,6 +1084,17 @@ export function App() {
                     </span>
                   </button>
                 </div>
+              </section>
+
+              <section className="dialog-field dialog-field--code schema-generator__pane schema-generator__pane--editor">
+                <div className="schema-generator__pane-header">
+                  <div>
+                    <span>Редактор</span>
+                    <p className="schema-generator__pane-note">
+                      {`Источник ${dialog.activeSourceIndex + 1} из ${dialog.rawJsons.length}`}
+                    </p>
+                  </div>
+                </div>
 
                 <CodeMirror
                   className="schema-generator__code-mirror schema-generator__code-mirror--input"
@@ -1254,56 +1108,23 @@ export function App() {
                   spellCheck={false}
                 />
                 <small className="dialog-hint">
-                  Можно вставить объект, массив или любое другое валидное JSON-значение. Схема
-                  соберётся из всех источников.
+                  Подсветка ошибок работает сразу. Сохрани, когда закончишь править источник.
                 </small>
-              </div>
-
-              <div className="schema-generator__pane">
-                <div className="dialog-field dialog-field--code">
-                  <span>Схема</span>
-                  <CodeMirror
-                    className="schema-generator__code-mirror schema-generator__code-mirror--output"
-                    value={dialog.generatedSchema || ''}
-                    height={SCHEMA_EDITOR_HEIGHT}
-                    theme={JSON_EDITOR_THEME}
-                    extensions={JSON_OUTPUT_EXTENSIONS}
-                    editable={false}
-                    readOnly
-                    basicSetup={false}
-                    placeholder="Нажми «Сгенерировать схему», чтобы увидеть результат."
-                    spellCheck={false}
-                  />
-                </div>
-
-                {dialog.error ? (
-                  <div className="dialog-feedback dialog-feedback--error">{dialog.error}</div>
-                ) : (
-                  <p className="helper">
-                    Ответ приходит от Python API `genschema` на `{GENSCHEMA_BASE_URL}`.
-                  </p>
-                )}
-              </div>
+              </section>
             </div>
 
             <div className="dialog-actions dialog-actions--spread">
-              <span className="dialog-status">
-                {dialog.isGenerating
-                  ? 'Генерирую схему...'
-                  : dialog.generatedSchema
-                    ? 'Схема готова'
-                    : 'Готов к генерации'}
-              </span>
+              <span className="dialog-status">Изменения применяются только после сохранения</span>
               <div className="dialog-actions__buttons">
                 <button type="button" onClick={closeDialog}>
                   Отмена
                 </button>
-                <button type="submit" className="primary" disabled={dialog.isGenerating}>
-                  {dialog.isGenerating ? 'Генерирую...' : 'Сгенерировать схему'}
+                <button type="button" className="primary" onClick={saveSchemaGeneratorRawJsons}>
+                  Сохранить
                 </button>
               </div>
             </div>
-          </form>
+          </div>
         </DialogShell>
       ) : null}
 
