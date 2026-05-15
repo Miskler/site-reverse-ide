@@ -1353,6 +1353,24 @@ button.is-active {
   font-weight: 600;
 }
 
+.app-toast__link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: rgba(237, 243, 247, 0.35);
+  text-underline-offset: 0.12em;
+}
+
+.app-toast__link:hover {
+  text-decoration-color: rgba(237, 243, 247, 0.75);
+}
+
 .app-toast__description {
   color: #b7c2ce;
   font-size: 0.82rem;

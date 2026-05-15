@@ -14,6 +14,7 @@ interface SchemaCanvasProps {
   positions: NodePositions;
   selection: SchemaSelection | null;
   revision: number;
+  focusNodeRequest: { nodeId: string; token: number } | null;
   onSelectNode: (nodeId: string) => void;
   onSelectRow: (nodeId: string, rowId: string) => void;
   onClearSelection: () => void;
@@ -32,6 +33,7 @@ export function SchemaCanvas({
   positions,
   selection,
   revision,
+  focusNodeRequest,
   onSelectNode,
   onSelectRow,
   onClearSelection,
@@ -50,6 +52,30 @@ export function SchemaCanvas({
       maxZoom: 1.15,
     });
   }, [revision]);
+
+  useEffect(() => {
+    if (!reactFlowRef.current || !focusNodeRequest) {
+      return;
+    }
+
+    const node = model.nodeMap[focusNodeRequest.nodeId];
+    const position = positions[focusNodeRequest.nodeId];
+
+    if (!node || !position) {
+      return;
+    }
+
+    const zoom = reactFlowRef.current.getZoom();
+
+    reactFlowRef.current.setCenter(
+      position.x + node.size.width / 2,
+      position.y + node.size.height / 2,
+      {
+        zoom,
+        duration: 250,
+      },
+    );
+  }, [focusNodeRequest, model.nodeMap, positions]);
 
   const nodes: SchemaNodeType[] = useMemo(
     () =>

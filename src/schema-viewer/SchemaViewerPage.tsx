@@ -16,6 +16,11 @@ import { validateSchemaDocument } from './schema-validation';
 
 const DEFAULT_SCHEMA_TEXT = JSON.stringify(SAMPLE_SCHEMA, null, 2);
 
+interface FocusNodeRequest {
+  nodeId: string;
+  token: number;
+}
+
 interface SchemaViewerPageProps {
   initialSource: string | null;
   onBackToGraph: () => void;
@@ -36,7 +41,9 @@ export function SchemaViewerPage({
   const [selection, setSelection] = useState<SchemaSelection | null>(null);
   const [busy, setBusy] = useState(true);
   const [revision, setRevision] = useState(0);
+  const [focusNodeRequest, setFocusNodeRequest] = useState<FocusNodeRequest | null>(null);
   const requestCounter = useRef(0);
+  const focusTokenCounter = useRef(0);
   const toastCache = useRef({
     error: '',
     warning: '',
@@ -82,6 +89,76 @@ export function SchemaViewerPage({
     }
 
     appToast.warning(primary, description);
+  }
+
+  function parsePointerWarning(message: string): { pointer: string; description: string } | null {
+    const separatorIndex = message.indexOf(': ');
+
+    if (separatorIndex <= 0) {
+      return null;
+    }
+
+    const pointer = message.slice(0, separatorIndex).trim();
+    const description = message.slice(separatorIndex + 2).trim();
+
+    if (!pointer.startsWith('#') || !description) {
+      return null;
+    }
+
+    return {
+      pointer,
+      description,
+    };
+  }
+
+  function focusSchemaPointer(pointer: string) {
+    if (!graphModel) {
+      return;
+    }
+
+    const node =
+      Object.values(graphModel.nodeMap).find(
+        (entry) => entry.pointer === pointer && entry.kind !== 'ref-target',
+      ) ??
+      Object.values(graphModel.nodeMap).find((entry) => entry.pointer === pointer);
+
+    if (!node) {
+      return;
+    }
+
+    const token = focusTokenCounter.current + 1;
+    focusTokenCounter.current = token;
+
+    setSelection({ kind: 'node', nodeId: node.id });
+    setFocusNodeRequest({ nodeId: node.id, token });
+  }
+
+  function showSchemaWarning(message: string) {
+    const parsed = parsePointerWarning(message);
+
+    if (!parsed) {
+      appToast.warning(message, undefined, {
+        toastId: `schema-warning:${message}`,
+      });
+      return;
+    }
+
+    const toastId = `schema-warning:${message}`;
+
+    appToast.warning(
+      <button
+        type="button"
+        className="app-toast__link"
+        onClick={() => {
+          appToast.dismiss(toastId);
+          focusSchemaPointer(parsed.pointer);
+        }}
+      >
+        {parsed.pointer}
+      </button>,
+      parsed.description,
+      { toastId },
+    );
   }
 
   async function applySchemaText(text: string, origin: string) {
@@ -156,6 +233,7 @@ export function SchemaViewerPage({
         setGraphModel(model);
         setPositions(nextPositions);
         setSelection(null);
+        setFocusNodeRequest(null);
         setSourceOrigin(origin);
         setBusy(false);
         setRevision((value) => value + 1);
@@ -164,7 +242,9 @@ export function SchemaViewerPage({
       resetToastCache();
 
       if (model.warnings.length > 0) {
-        showSchemaToast('warning', model.warnings);
+        model.warnings.forEach((warning) => {
+          showSchemaWarning(warning);
+        });
       }
 
       storeSchemaSource(text);
@@ -257,6 +337,7 @@ export function SchemaViewerPage({
             positions={positions}
             selection={selection}
             revision={revision}
+            focusNodeRequest={focusNodeRequest}
             onSelectNode={(nodeId) => setSelection({ kind: 'node', nodeId })}
             onSelectRow={(nodeId, rowId) => setSelection({ kind: 'row', nodeId, rowId })}
             onClearSelection={() => setSelection(null)}
