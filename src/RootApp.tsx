@@ -4,10 +4,11 @@ import { App as GraphEditorApp } from './App';
 import { SchemaViewerPage } from './schema-viewer/SchemaViewerPage';
 import {
   pushGraphRoute,
-  pushSchemaRoute,
+  pushSchemaNodeRoute,
   resolveAppRoute,
   type AppRoute,
 } from './lib/app-router';
+import { STORAGE_KEY, createDefaultGraph, sanitizeGraphDocument } from './shared/graph';
 
 const TOAST_CONTAINER_OPTIONS = {
   position: 'bottom-right' as const,
@@ -40,8 +41,17 @@ export function RootApp() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const openSchemaViewer = useCallback((initialSource: string | null = null) => {
-    pushSchemaRoute(initialSource);
+  useEffect(() => {
+    if (route.kind !== 'graph' || window.location.pathname === '/') {
+      return;
+    }
+
+    window.history.replaceState(null, '', '/');
+  }, [route]);
+
+  const openSchemaViewer = useCallback(() => {
+    const nodeUid = resolveFirstGraphNodeUid();
+    pushSchemaNodeRoute(nodeUid);
     setRoute(resolveAppRoute(window.location.pathname, window.history.state));
   }, []);
 
@@ -60,7 +70,8 @@ export function RootApp() {
       <ToastContainer {...TOAST_CONTAINER_OPTIONS} />
       {route.kind === 'schema' ? (
         <SchemaViewerPage
-          initialSource={route.initialSource}
+          nodeUid={route.nodeUid}
+          jsonIndex={route.jsonIndex}
           onBackToGraph={backToGraph}
         />
       ) : (
@@ -69,7 +80,7 @@ export function RootApp() {
             type="button"
             className="root-app-shell__route-switch"
             onClick={() => openSchemaViewer()}
-            title="Открыть просмотр JSON Schema"
+            title="Open schema viewer"
           >
             JSON Schema
           </button>
@@ -78,4 +89,24 @@ export function RootApp() {
       )}
     </>
   );
+}
+
+function resolveFirstGraphNodeUid(): string {
+  const fallback = createDefaultGraph().nodes[0]?.uid ?? 'NODE';
+
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return fallback;
+    }
+
+    const graph = sanitizeGraphDocument(JSON.parse(raw) as unknown);
+    return graph.nodes[0]?.uid ?? fallback;
+  } catch {
+    return fallback;
+  }
 }

@@ -1609,24 +1609,6 @@ button.is-active {
   overflow: hidden;
 }
 
-.schema-viewer-shell__topbar {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem 0;
-  background: var(--bg);
-}
-
-.schema-viewer-shell__topbar-copy {
-  min-width: 0;
-}
-
-.schema-viewer-shell__topbar button {
-  flex: none;
-}
-
 .schema-viewer-shell__canvas {
   position: relative;
   min-width: 0;
