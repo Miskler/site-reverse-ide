@@ -28,6 +28,7 @@ import {
 } from '@xyflow/react';
 import {
   HTTP_METHODS,
+  GRAPH_VERSION,
   STORAGE_KEY,
   createDefaultGraph,
   createEdgeDraft,
@@ -37,6 +38,7 @@ import {
   pickNodeColor,
   normalizeHttpMethod,
   normalizeText,
+  normalizeSourceJsonList,
   sanitizeGraphDocument,
   type GraphDocument,
   type GraphEdge,
@@ -55,7 +57,8 @@ type DialogState =
   | {
       kind: 'schema-generator';
       nodeId: string;
-      rawJson: string;
+      rawJsons: string[];
+      activeSourceIndex: number;
       generatedSchema: string;
       error: string | null;
       isGenerating: boolean;
@@ -201,6 +204,31 @@ function formatGeneratedSchema(schema: unknown): string {
   return JSON.stringify(schema, null, 2);
 }
 
+function formatSourceCount(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return `${count} источник`;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
+    return `${count} источника`;
+  }
+
+  return `${count} источников`;
+}
+
+function summarizeSourceJson(rawJson: string): string {
+  const trimmed = rawJson.trim();
+  if (!trimmed) {
+    return 'Пустой источник';
+  }
+
+  const compact = trimmed.replace(/\s+/g, ' ');
+  return compact.length > 80 ? `${compact.slice(0, 80)}…` : compact;
+}
+
 const api = {
   async loadGraph(): Promise<unknown> {
     const response = await fetch('/api/graph', {
@@ -215,7 +243,7 @@ const api = {
 
     return response.json();
   },
-  async generateSchema(sample: unknown): Promise<GenschemaResponse> {
+  async generateSchema(documents: unknown[]): Promise<GenschemaResponse> {
     const response = await fetch(GENSCHEMA_API_URL, {
       method: 'POST',
       headers: {
@@ -223,7 +251,7 @@ const api = {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        documents: [sample],
+        documents,
         use_default_comparators: true,
       }),
     });
@@ -433,20 +461,15 @@ export function App() {
 
   function composeDocument(nextNodes: CanvasNodeType[], nextEdges: FlowEdge[]): GraphDocument {
     return {
-      version: 2,
+      version: GRAPH_VERSION,
       nodes: nextNodes.map((node) => ({
         id: node.id,
+        uid: node.data.uid,
         method: node.data.method,
         title: node.data.title,
         note: node.data.note,
         color: node.data.color,
-        rawJson:
-          node.data.rawJson.trim() ||
-          createNodeRawJson({
-            method: node.data.method,
-            title: node.data.title,
-            note: node.data.note,
-          }),
+        rawJsons: node.data.rawJsons,
         position: node.position,
       })),
       edges: nextEdges.map((edge) => ({
@@ -724,20 +747,24 @@ export function App() {
       return;
     }
 
-    const rawJson =
-      node.data.rawJson.trim() ||
-      createNodeRawJson({
-        method: node.data.method,
-        title: node.data.title,
-        note: node.data.note,
-      });
+    const rawJsons =
+      node.data.rawJsons.length > 0
+        ? node.data.rawJsons
+        : [
+            createNodeRawJson({
+              method: node.data.method,
+              title: node.data.title,
+              note: node.data.note,
+            }),
+          ];
 
     setSelectedNodeId(nodeId);
     setSelectedEdgeId(null);
     setDialog({
       kind: 'schema-generator',
       nodeId,
-      rawJson,
+      rawJsons,
+      activeSourceIndex: 0,
       generatedSchema: '',
       error: null,
       isGenerating: false,
@@ -829,18 +856,34 @@ export function App() {
     if (current?.kind === 'color') {
       previewNodeColor(current.nodeId, current.originalColor);
     } else if (current?.kind === 'schema-generator') {
-      persistSchemaGeneratorRawJson();
+      persistSchemaGeneratorRawJsons();
     }
 
     setDialog(null);
   }, [previewNodeColor]);
 
-  function updateSchemaGeneratorRawJson(rawJson: string) {
+  function updateSchemaGeneratorRawJson(index: number, rawJson: string) {
     setDialog((current) =>
       current && current.kind === 'schema-generator'
         ? {
             ...current,
-            rawJson,
+            rawJsons: current.rawJsons.map((value, currentIndex) =>
+              currentIndex === index ? rawJson : value,
+            ),
+            generatedSchema: '',
+            error: null,
+        }
+        : current,
+    );
+  }
+
+  function addSchemaGeneratorRawJson() {
+    setDialog((current) =>
+      current && current.kind === 'schema-generator'
+        ? {
+            ...current,
+            rawJsons: [...current.rawJsons, ''],
+            activeSourceIndex: current.rawJsons.length,
             generatedSchema: '',
             error: null,
           }
@@ -848,43 +891,76 @@ export function App() {
     );
   }
 
-  function persistSchemaGeneratorRawJson() {
+  function removeSchemaGeneratorRawJson(index: number) {
+    setDialog((current) => {
+      if (!current || current.kind !== 'schema-generator' || current.rawJsons.length <= 1) {
+        return current;
+      }
+
+      const nextRawJsons = current.rawJsons.filter((_, currentIndex) => currentIndex !== index);
+      const nextActiveIndex = Math.min(current.activeSourceIndex, nextRawJsons.length - 1);
+
+      return {
+        ...current,
+        rawJsons: nextRawJsons,
+        activeSourceIndex: nextActiveIndex,
+        generatedSchema: '',
+        error: null,
+      };
+    });
+  }
+
+  function setSchemaGeneratorActiveSource(index: number) {
+    setDialog((current) =>
+      current && current.kind === 'schema-generator'
+        ? {
+            ...current,
+            activeSourceIndex: index,
+          }
+        : current,
+    );
+  }
+
+  function persistSchemaGeneratorRawJsons() {
     const current = dialogRef.current;
     if (!current || current.kind !== 'schema-generator') {
       return;
     }
 
     const node = nodesRef.current.find((candidate) => candidate.id === current.nodeId);
-    if (!node || node.data.rawJson === current.rawJson) {
+    if (!node || JSON.stringify(node.data.rawJsons) === JSON.stringify(current.rawJsons)) {
       return;
     }
 
-    updateNodeById(current.nodeId, { rawJson: current.rawJson });
+    updateNodeById(current.nodeId, { rawJsons: current.rawJsons });
   }
 
-  async function generateSchemaFromRawJson() {
+  async function generateSchemaFromRawJsons() {
     const current = dialogRef.current;
     if (!current || current.kind !== 'schema-generator') {
       return;
     }
 
-    persistSchemaGeneratorRawJson();
+    persistSchemaGeneratorRawJsons();
 
-    let parsedSample: unknown;
-    try {
-      parsedSample = JSON.parse(current.rawJson);
-    } catch {
-      setDialog((dialogState) =>
-        dialogState && dialogState.kind === 'schema-generator'
-          ? {
-              ...dialogState,
-              error: 'Сырой JSON должен быть валидным. Исправь синтаксис и попробуй снова.',
-              isGenerating: false,
-            }
-          : dialogState,
-      );
-      setStatus('JSON нужно исправить перед генерацией', 'warning');
-      return;
+    const parsedSamples: unknown[] = [];
+
+    for (const [index, rawJson] of current.rawJsons.entries()) {
+      try {
+        parsedSamples.push(JSON.parse(rawJson));
+      } catch {
+        setDialog((dialogState) =>
+          dialogState && dialogState.kind === 'schema-generator'
+            ? {
+                ...dialogState,
+                error: `Источник ${index + 1} должен быть валидным JSON. Исправь синтаксис и попробуй снова.`,
+                isGenerating: false,
+              }
+            : dialogState,
+        );
+        setStatus('JSON нужно исправить перед генерацией', 'warning');
+        return;
+      }
     }
 
     const requestId = ++schemaGenerationRequestRef.current;
@@ -900,7 +976,7 @@ export function App() {
     );
 
     try {
-      const response = await api.generateSchema(parsedSample);
+      const response = await api.generateSchema(parsedSamples);
       if (schemaGenerationRequestRef.current !== requestId) {
         return;
       }
@@ -978,7 +1054,7 @@ export function App() {
 
   function updateNodeById(
     nodeId: string,
-    patch: Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color' | 'rawJson'>>,
+    patch: Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color' | 'rawJsons'>>,
   ) {
     const nextNodes = nodesRef.current.map((node) => {
       if (node.id !== nodeId) {
@@ -993,8 +1069,10 @@ export function App() {
           title: patch.title !== undefined ? patch.title : node.data.title,
           note: patch.note !== undefined ? patch.note : node.data.note,
           color: patch.color !== undefined ? patch.color : node.data.color,
-          rawJson:
-            patch.rawJson !== undefined ? normalizeText(patch.rawJson, node.data.rawJson) : node.data.rawJson,
+          rawJsons:
+            patch.rawJsons !== undefined
+              ? normalizeSourceJsonList(patch.rawJsons, node.data.rawJsons)
+              : node.data.rawJsons,
         },
       };
     });
@@ -1102,16 +1180,72 @@ export function App() {
             className="dialog-form dialog-form--schema"
             onSubmit={(event) => {
               event.preventDefault();
-              void generateSchemaFromRawJson();
+              void generateSchemaFromRawJsons();
             }}
           >
             <div className="schema-generator__grid">
-              <label className="dialog-field dialog-field--code schema-generator__pane">
-                <span>Сырой JSON</span>
+              <div className="dialog-field dialog-field--code schema-generator__pane">
+                <div className="schema-generator__pane-header">
+                  <span>Источники JSON</span>
+                  <div className="schema-generator__pane-actions">
+                    <span className="schema-generator__source-count">
+                      {formatSourceCount(dialog.rawJsons.length)}
+                    </span>
+                    <button type="button" onClick={addSchemaGeneratorRawJson}>
+                      Добавить
+                    </button>
+                  </div>
+                </div>
+
+                <div className="schema-generator__source-list" aria-label="JSON sources">
+                  {dialog.rawJsons.map((rawJson, index) => (
+                    <div
+                      key={index}
+                      className={`schema-generator__source-card${index === dialog.activeSourceIndex ? ' is-active' : ''}`}
+                    >
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={index === dialog.activeSourceIndex}
+                        className="schema-generator__source-card-main"
+                        onClick={() => setSchemaGeneratorActiveSource(index)}
+                        title={rawJson.trim() || `Источник ${index + 1}`}
+                      >
+                        <span className="schema-generator__source-card-title">
+                          {`Источник ${index + 1}`}
+                        </span>
+                        <span className="schema-generator__source-card-preview">
+                          {summarizeSourceJson(rawJson)}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="schema-generator__source-card-remove"
+                        onClick={() => removeSchemaGeneratorRawJson(index)}
+                        disabled={dialog.rawJsons.length <= 1}
+                        aria-label={`Удалить источник ${index + 1}`}
+                        title="Удалить источник"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="schema-generator__source-card schema-generator__source-card--add"
+                    onClick={addSchemaGeneratorRawJson}
+                  >
+                    <span className="schema-generator__source-card-title">Добавить источник</span>
+                    <span className="schema-generator__source-card-preview">
+                      Ещё один сырой JSON для общей схемы
+                    </span>
+                  </button>
+                </div>
+
                 <CodeMirror
                   className="schema-generator__code-mirror schema-generator__code-mirror--input"
-                  value={dialog.rawJson}
-                  onChange={(value) => updateSchemaGeneratorRawJson(value)}
+                  value={dialog.rawJsons[dialog.activeSourceIndex] ?? ''}
+                  onChange={(value) => updateSchemaGeneratorRawJson(dialog.activeSourceIndex, value)}
                   autoFocus
                   height={SCHEMA_EDITOR_HEIGHT}
                   theme={JSON_EDITOR_THEME}
@@ -1119,8 +1253,11 @@ export function App() {
                   placeholder={`{\n  "name": "Alice",\n  "email": "alice@example.com"\n}`}
                   spellCheck={false}
                 />
-                <small className="dialog-hint">Можно вставить объект, массив или любое другое валидное JSON-значение.</small>
-              </label>
+                <small className="dialog-hint">
+                  Можно вставить объект, массив или любое другое валидное JSON-значение. Схема
+                  соберётся из всех источников.
+                </small>
+              </div>
 
               <div className="schema-generator__pane">
                 <div className="dialog-field dialog-field--code">

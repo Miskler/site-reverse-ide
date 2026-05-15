@@ -1,5 +1,7 @@
-export const GRAPH_VERSION = 2;
+export const GRAPH_VERSION = 3;
 export const STORAGE_KEY = 'site-reverse-ide:graph-v2';
+
+const LEGACY_GRAPH_VERSIONS = new Set([2]);
 
 export const HTTP_METHODS = [
   'GET',
@@ -36,11 +38,12 @@ export interface GraphPosition {
 
 export interface GraphNode {
   id: string;
+  uid: string;
   method: HttpMethod;
   title: string;
   note: string;
   color: string;
-  rawJson: string;
+  rawJsons: string[];
   position: GraphPosition;
 }
 
@@ -65,6 +68,53 @@ const DEFAULT_NODE_SIZE = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+export function createNodeUid(): string {
+  if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(3);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(0, 6)
+    .toUpperCase();
+}
+
+export function normalizeNodeUid(value: unknown, fallback = createNodeUid()): string {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const text = value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4,8}$/.test(text)) {
+    return fallback;
+  }
+
+  return text;
+}
+
+export function normalizeSourceJsonList(value: unknown, fallback: string[]): string[] {
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => normalizeText(item, ''))
+      .filter((item) => item.length > 0);
+
+    if (items.length > 0) {
+      return items;
+    }
+  }
+
+  if (typeof value === 'string') {
+    const text = normalizeText(value, '');
+    if (text.length > 0) {
+      return [text];
+    }
+  }
+
+  return [...fallback];
 }
 
 export function createNodeRawJson(input: {
@@ -141,11 +191,13 @@ export function normalizePosition(
 
 export function createNodeDraft(input: {
   id?: string;
+  uid?: unknown;
   method?: unknown;
   title?: unknown;
   note?: unknown;
   color?: unknown;
   rawJson?: unknown;
+  rawJsons?: unknown;
   position?: unknown;
   index: number;
 }): GraphNode {
@@ -153,15 +205,20 @@ export function createNodeDraft(input: {
   const title = normalizeText(input.title, `Функция ${input.index + 1}`);
   const note = normalizeText(input.note, 'Коротко опиши назначение функции.');
   const color = normalizeColor(input.color, pickNodeColor(input.index));
-  const rawJson = normalizeText(input.rawJson, createNodeRawJson({ method, title, note }));
+  const fallbackRawJson = createNodeRawJson({ method, title, note });
+  const rawJsons = normalizeSourceJsonList(
+    input.rawJsons,
+    normalizeSourceJsonList(input.rawJson, [fallbackRawJson]),
+  );
 
   return {
     id: normalizeText(input.id, createId('node')),
+    uid: normalizeNodeUid(input.uid),
     method,
     title,
     note,
     color,
-    rawJson,
+    rawJsons,
     position: normalizePosition(input.position, {
       x: 120 + input.index * 24,
       y: 120 + input.index * 16,
@@ -255,13 +312,17 @@ export function createDefaultGraph(): GraphDocument {
 }
 
 export function sanitizeGraphDocument(input: unknown): GraphDocument {
-  if (!isRecord(input) || input.version !== GRAPH_VERSION) {
+  if (
+    !isRecord(input) ||
+    (input.version !== GRAPH_VERSION && !LEGACY_GRAPH_VERSIONS.has(Number(input.version)))
+  ) {
     return createDefaultGraph();
   }
 
   const rawNodes = Array.isArray(input.nodes) ? input.nodes : [];
   const nodes: GraphNode[] = [];
   const seenNodeIds = new Set<string>();
+  const seenNodeUids = new Set<string>();
 
   rawNodes.forEach((rawNode, index) => {
     if (!isRecord(rawNode)) {
@@ -274,18 +335,26 @@ export function sanitizeGraphDocument(input: unknown): GraphDocument {
     }
 
     seenNodeIds.add(id);
-    nodes.push(
-      createNodeDraft({
-        id,
-        method: rawNode.method,
-        title: rawNode.title,
-        note: rawNode.note,
-        color: rawNode.color,
-        rawJson: rawNode.rawJson,
-        position: rawNode.position,
-        index,
-      }),
-    );
+
+    const node = createNodeDraft({
+      id,
+      uid: rawNode.uid,
+      method: rawNode.method,
+      title: rawNode.title,
+      note: rawNode.note,
+      color: rawNode.color,
+      rawJson: rawNode.rawJson,
+      rawJsons: rawNode.rawJsons,
+      position: rawNode.position,
+      index,
+    });
+
+    while (seenNodeUids.has(node.uid)) {
+      node.uid = createNodeUid();
+    }
+
+    seenNodeUids.add(node.uid);
+    nodes.push(node);
   });
 
   if (nodes.length === 0) {

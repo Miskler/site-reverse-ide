@@ -3,14 +3,15 @@ import * as Select from '@radix-ui/react-select';
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { HTTP_METHODS, type GraphNode, type HttpMethod } from '../shared/graph';
 
-type CanvasNodePatch = Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color' | 'rawJson'>>;
+type CanvasNodePatch = Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color' | 'rawJsons'>>;
 
 export interface CanvasNodeData extends Record<string, unknown> {
+  uid: string;
   method: HttpMethod;
   title: string;
   note: string;
   color: string;
-  rawJson: string;
+  rawJsons: string[];
   connectMode: boolean;
   linkCount: number;
   onRequestDelete: (nodeId: string) => void;
@@ -286,6 +287,11 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
       </div>
 
       <div className="graph-node__body">
+        <div className="graph-node__meta-row">
+          <code className="graph-node__uid" title={`UID: ${data.uid}`}>
+            #{data.uid}
+          </code>
+        </div>
         <textarea
           ref={noteInputRef}
           className="graph-node__note-input nodrag nopan"

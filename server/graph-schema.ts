@@ -3,9 +3,12 @@ import {
   HTTP_METHODS,
   GRAPH_VERSION,
   createNodeRawJson,
+  createNodeUid,
   normalizeColor,
   normalizeHttpMethod,
   normalizePosition,
+  normalizeNodeUid,
+  normalizeSourceJsonList,
   normalizeText,
   type GraphDocument,
   type GraphEdge,
@@ -22,11 +25,13 @@ const positionSchema = z
 const nodeSchema = z
   .object({
     id: z.string().trim().min(1),
+    uid: z.string().trim().min(1).optional(),
     method: z.enum(HTTP_METHODS).optional(),
     title: z.string(),
     note: z.string(),
     color: z.string(),
     rawJson: z.string().optional(),
+    rawJsons: z.array(z.string()).optional(),
     position: positionSchema,
   })
   .strict();
@@ -43,7 +48,7 @@ const edgeSchema = z
 
 const graphSchema = z
   .object({
-    version: z.literal(GRAPH_VERSION),
+    version: z.union([z.literal(GRAPH_VERSION), z.literal(2)]),
     nodes: z.array(nodeSchema),
     edges: z.array(edgeSchema),
   })
@@ -60,28 +65,43 @@ export function parseGraphDocument(input: unknown): GraphDocument {
   const parsed = graphSchema.parse(input);
 
   const nodeIds = new Set<string>();
+  const nodeUids = new Set<string>();
   const nodes: GraphNode[] = parsed.nodes.map((node) => {
     if (nodeIds.has(node.id)) {
       throw new GraphValidationError(`Duplicate node id: ${node.id}`);
     }
 
     nodeIds.add(node.id);
-    return {
+
+    const graphNode: GraphNode = {
       id: node.id,
+      uid: normalizeNodeUid(node.uid, createNodeUid()),
       method: normalizeHttpMethod(node.method),
       title: normalizeText(node.title, 'Без названия'),
       note: normalizeText(node.note, ''),
       color: normalizeColor(node.color),
-      rawJson: normalizeText(
-        node.rawJson,
-        createNodeRawJson({
-          method: normalizeHttpMethod(node.method),
-          title: normalizeText(node.title, 'Без названия'),
-          note: normalizeText(node.note, ''),
-        }),
+      rawJsons: normalizeSourceJsonList(
+        node.rawJsons,
+        normalizeSourceJsonList(
+          node.rawJson,
+          [
+            createNodeRawJson({
+              method: normalizeHttpMethod(node.method),
+              title: normalizeText(node.title, 'Без названия'),
+              note: normalizeText(node.note, ''),
+            }),
+          ],
+        ),
       ),
       position: normalizePosition(node.position),
     };
+
+    while (nodeUids.has(graphNode.uid)) {
+      graphNode.uid = createNodeUid();
+    }
+
+    nodeUids.add(graphNode.uid);
+    return graphNode;
   });
 
   const edges: GraphEdge[] = [];
