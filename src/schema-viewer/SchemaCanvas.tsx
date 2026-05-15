@@ -1,15 +1,10 @@
 import {
-  Background,
-  BackgroundVariant,
   ReactFlow,
-  type Edge,
-  type Node,
   type ReactFlowInstance,
 } from '@xyflow/react';
 import { useEffect, useMemo, useRef } from 'react';
 import { createTargetHandleId } from './handle-ids';
 import type { NodePositions } from './layout';
-import type { FlowNodeData } from './flow-types';
 import type { SchemaGraphModel, SchemaSelection } from './schema-types';
 import { SchemaNode, type SchemaNodeType } from './SchemaNode';
 import { SchemaRelationEdge, type SchemaEdgeType } from './SchemaRelationEdge';
@@ -22,10 +17,6 @@ interface SchemaCanvasProps {
   onSelectNode: (nodeId: string) => void;
   onSelectRow: (nodeId: string, rowId: string) => void;
   onClearSelection: () => void;
-}
-
-interface RelationEdgeData {
-  label?: string;
 }
 
 const nodeTypes = {
@@ -94,6 +85,7 @@ export function SchemaCanvas({
         targetHandle: createTargetHandleId(edge.target),
         type: 'relation',
         label: edge.label,
+        data: edge.labelPosition ? { labelPosition: edge.labelPosition } : undefined,
         selectable: false,
       })),
     [model.edges],
@@ -112,15 +104,13 @@ export function SchemaCanvas({
         onSelectNode(node.id);
       }}
       onPaneClick={onClearSelection}
+      nodesConnectable={false}
+      nodesDraggable={false}
+      elementsSelectable={false}
       panOnDrag
       panOnScroll={false}
       zoomOnScroll
-      defaultEdgeOptions={{
-        type: 'relation',
-      }}
       className="schema-canvas"
-    >
-      <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={0.75} />
-    </ReactFlow>
+    />
   );
 }

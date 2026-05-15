@@ -333,6 +333,7 @@ function addChildRow(
       sourceHandle: row.handleId,
       sourceRowId: row.id,
       label: input.relation,
+      labelPosition: 'center',
     });
   }
 }

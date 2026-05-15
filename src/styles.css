@@ -1646,17 +1646,30 @@ button.is-active {
 .schema-edge-stroke {
   stroke: rgba(216, 224, 232, 0.45);
   stroke-width: 1.5;
+  pointer-events: none;
 }
 
 .schema-edge-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  white-space: nowrap;
   padding: 0.28rem 0.5rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(10, 14, 20, 0.9);
   color: #d8e0e8;
   font-size: 0.7rem;
+  line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  transform-origin: 0 0;
+  box-sizing: border-box;
+  pointer-events: none;
 }
 
 @media (max-width: 1200px) {

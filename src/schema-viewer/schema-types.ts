@@ -67,6 +67,7 @@ export interface SchemaGraphEdge {
   sourceHandle?: string;
   sourceRowId?: string;
   label?: string;
+  labelPosition?: 'center' | 'source';
 }
 
 export interface SchemaGraphModel {

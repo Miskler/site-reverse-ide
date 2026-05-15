@@ -8,6 +8,7 @@ import {
 
 interface RelationEdgeData extends Record<string, unknown> {
   label?: string;
+  labelPosition?: 'center' | 'source';
 }
 
 export type SchemaEdgeType = Edge<RelationEdgeData, 'relation'>;
@@ -33,7 +34,7 @@ export function SchemaRelationEdge({
 
   return (
     <>
-      <BaseEdge id={id} path={path} className="schema-edge-stroke" interactionWidth={18} />
+      <BaseEdge id={id} path={path} className="schema-edge-stroke" interactionWidth={0} />
       {typeof label === 'string' && label.length > 0 ? (
         <EdgeLabelRenderer>
           <div
