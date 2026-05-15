@@ -32,8 +32,10 @@ import {
   createEdgeDraft,
   createId,
   createNodeDraft,
+  createNodeRawJson,
   pickNodeColor,
   normalizeHttpMethod,
+  normalizeText,
   sanitizeGraphDocument,
   type GraphDocument,
   type GraphEdge,
@@ -415,6 +417,13 @@ export function App() {
         title: node.data.title,
         note: node.data.note,
         color: node.data.color,
+        rawJson:
+          node.data.rawJson.trim() ||
+          createNodeRawJson({
+            method: node.data.method,
+            title: node.data.title,
+            note: node.data.note,
+          }),
         position: node.position,
       })),
       edges: nextEdges.map((edge) => ({
@@ -435,26 +444,27 @@ export function App() {
       linkCounts.set(edge.target, (linkCounts.get(edge.target) ?? 0) + 1);
     }
 
-    return document.nodes.map((node, index) => ({
-      id: node.id,
-      type: 'canvasNode',
-      position: node.position,
-      data: {
-        method: node.method,
-        title: node.title,
-        note: node.note,
-        color: node.color,
-        connectMode,
-        linkCount: linkCounts.get(node.id) ?? 0,
-        onRequestDelete: requestDeleteNode,
-        onOpenEditor: requestOpenNodeDetails,
-        onOpenColorPicker: requestOpenNodeColor,
-        onUpdateNode: updateNodeById,
-      },
-      draggable: true,
-      dragHandle: '.graph-node__drag-handle',
-      selectable: true,
-    }));
+    return document.nodes.map((node) => {
+      const { position, ...nodeData } = node;
+
+      return {
+        id: node.id,
+        type: 'canvasNode',
+        position,
+        data: {
+          ...nodeData,
+          connectMode,
+          linkCount: linkCounts.get(node.id) ?? 0,
+          onRequestDelete: requestDeleteNode,
+          onOpenEditor: requestOpenNodeDetails,
+          onOpenColorPicker: requestOpenNodeColor,
+          onUpdateNode: updateNodeById,
+        },
+        draggable: true,
+        dragHandle: '.graph-node__drag-handle',
+        selectable: true,
+      };
+    });
   }
 
   function buildFlowEdges(document: GraphDocument): FlowEdge[] {
@@ -528,15 +538,23 @@ export function App() {
 
   function addNodeAt(position?: { x: number; y: number }) {
     const index = nodesRef.current.length;
-    const newNode: CanvasNodeType = {
+    const draft = createNodeDraft({
       id: createId('node'),
-      type: 'canvasNode',
+      method: HTTP_METHODS[0],
+      title: `Функция ${index + 1}`,
+      note: 'Коротко опиши назначение функции.',
+      color: pickNodeColor(index),
       position: position ?? getCanvasCenter(),
+      index,
+    });
+    const { position: draftPosition, ...draftData } = draft;
+
+    const newNode: CanvasNodeType = {
+      id: draft.id,
+      type: 'canvasNode',
+      position: draftPosition,
       data: {
-        method: HTTP_METHODS[0],
-        title: `Функция ${index + 1}`,
-        note: 'Коротко опиши назначение функции.',
-        color: pickNodeColor(index),
+        ...draftData,
         connectMode,
         linkCount: 0,
         onRequestDelete: requestDeleteNode,
@@ -683,15 +701,13 @@ export function App() {
       return;
     }
 
-    const rawJson = JSON.stringify(
-      {
+    const rawJson =
+      node.data.rawJson.trim() ||
+      createNodeRawJson({
         method: node.data.method,
         title: node.data.title,
-        description: node.data.note,
-      },
-      null,
-      2,
-    );
+        note: node.data.note,
+      });
 
     setSelectedNodeId(nodeId);
     setSelectedEdgeId(null);
@@ -789,6 +805,8 @@ export function App() {
     const current = dialogRef.current;
     if (current?.kind === 'color') {
       previewNodeColor(current.nodeId, current.originalColor);
+    } else if (current?.kind === 'schema-generator') {
+      persistSchemaGeneratorRawJson();
     }
 
     setDialog(null);
@@ -807,11 +825,27 @@ export function App() {
     );
   }
 
+  function persistSchemaGeneratorRawJson() {
+    const current = dialogRef.current;
+    if (!current || current.kind !== 'schema-generator') {
+      return;
+    }
+
+    const node = nodesRef.current.find((candidate) => candidate.id === current.nodeId);
+    if (!node || node.data.rawJson === current.rawJson) {
+      return;
+    }
+
+    updateNodeById(current.nodeId, { rawJson: current.rawJson });
+  }
+
   async function generateSchemaFromRawJson() {
     const current = dialogRef.current;
     if (!current || current.kind !== 'schema-generator') {
       return;
     }
+
+    persistSchemaGeneratorRawJson();
 
     let parsedSample: unknown;
     try {
@@ -919,7 +953,10 @@ export function App() {
     setSelectedEdgeId(selectedEdges[0]?.id ?? null);
   }
 
-  function updateNodeById(nodeId: string, patch: Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color'>>) {
+  function updateNodeById(
+    nodeId: string,
+    patch: Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color' | 'rawJson'>>,
+  ) {
     const nextNodes = nodesRef.current.map((node) => {
       if (node.id !== nodeId) {
         return node;
@@ -933,6 +970,8 @@ export function App() {
           title: patch.title !== undefined ? patch.title : node.data.title,
           note: patch.note !== undefined ? patch.note : node.data.note,
           color: patch.color !== undefined ? patch.color : node.data.color,
+          rawJson:
+            patch.rawJson !== undefined ? normalizeText(patch.rawJson, node.data.rawJson) : node.data.rawJson,
         },
       };
     });

@@ -40,6 +40,7 @@ export interface GraphNode {
   title: string;
   note: string;
   color: string;
+  rawJson: string;
   position: GraphPosition;
 }
 
@@ -64,6 +65,22 @@ const DEFAULT_NODE_SIZE = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+export function createNodeRawJson(input: {
+  method: HttpMethod;
+  title: string;
+  note: string;
+}): string {
+  return JSON.stringify(
+    {
+      method: input.method,
+      title: input.title,
+      description: input.note,
+    },
+    null,
+    2,
+  );
 }
 
 export function createId(prefix: string): string {
@@ -128,15 +145,23 @@ export function createNodeDraft(input: {
   title?: unknown;
   note?: unknown;
   color?: unknown;
+  rawJson?: unknown;
   position?: unknown;
   index: number;
 }): GraphNode {
+  const method = normalizeHttpMethod(input.method);
+  const title = normalizeText(input.title, `Функция ${input.index + 1}`);
+  const note = normalizeText(input.note, 'Коротко опиши назначение функции.');
+  const color = normalizeColor(input.color, pickNodeColor(input.index));
+  const rawJson = normalizeText(input.rawJson, createNodeRawJson({ method, title, note }));
+
   return {
     id: normalizeText(input.id, createId('node')),
-    method: normalizeHttpMethod(input.method),
-    title: normalizeText(input.title, `Функция ${input.index + 1}`),
-    note: normalizeText(input.note, 'Коротко опиши назначение функции.'),
-    color: normalizeColor(input.color, pickNodeColor(input.index)),
+    method,
+    title,
+    note,
+    color,
+    rawJson,
     position: normalizePosition(input.position, {
       x: 120 + input.index * 24,
       y: 120 + input.index * 16,
@@ -256,6 +281,7 @@ export function sanitizeGraphDocument(input: unknown): GraphDocument {
         title: rawNode.title,
         note: rawNode.note,
         color: rawNode.color,
+        rawJson: rawNode.rawJson,
         position: rawNode.position,
         index,
       }),

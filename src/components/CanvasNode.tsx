@@ -3,13 +3,14 @@ import * as Select from '@radix-ui/react-select';
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { HTTP_METHODS, type GraphNode, type HttpMethod } from '../shared/graph';
 
-type CanvasNodePatch = Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color'>>;
+type CanvasNodePatch = Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color' | 'rawJson'>>;
 
 export interface CanvasNodeData extends Record<string, unknown> {
   method: HttpMethod;
   title: string;
   note: string;
   color: string;
+  rawJson: string;
   connectMode: boolean;
   linkCount: number;
   onRequestDelete: (nodeId: string) => void;

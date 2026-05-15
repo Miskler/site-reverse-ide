@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   HTTP_METHODS,
   GRAPH_VERSION,
+  createNodeRawJson,
   normalizeColor,
   normalizeHttpMethod,
   normalizePosition,
@@ -25,6 +26,7 @@ const nodeSchema = z
     title: z.string(),
     note: z.string(),
     color: z.string(),
+    rawJson: z.string().optional(),
     position: positionSchema,
   })
   .strict();
@@ -70,6 +72,14 @@ export function parseGraphDocument(input: unknown): GraphDocument {
       title: normalizeText(node.title, 'Без названия'),
       note: normalizeText(node.note, ''),
       color: normalizeColor(node.color),
+      rawJson: normalizeText(
+        node.rawJson,
+        createNodeRawJson({
+          method: normalizeHttpMethod(node.method),
+          title: normalizeText(node.title, 'Без названия'),
+          note: normalizeText(node.note, ''),
+        }),
+      ),
       position: normalizePosition(node.position),
     };
   });
