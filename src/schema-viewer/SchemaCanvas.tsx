@@ -40,18 +40,23 @@ export function SchemaCanvas({
   onClearSelection,
 }: SchemaCanvasProps) {
   const reactFlowRef = useRef<ReactFlowInstance<SchemaNodeType, SchemaEdgeType> | null>(null);
+  const initialFitPendingRef = useRef(true);
 
-  useEffect(() => {
-    if (!reactFlowRef.current) {
-      return;
-    }
-
-    void reactFlowRef.current.fitView({
+  function fitCanvas(instance: ReactFlowInstance<SchemaNodeType, SchemaEdgeType>) {
+    void instance.fitView({
       duration: 250,
       padding: 0.18,
       minZoom: 0.2,
       maxZoom: 1.15,
     });
+  }
+
+  useEffect(() => {
+    if (!reactFlowRef.current || initialFitPendingRef.current) {
+      return;
+    }
+
+    fitCanvas(reactFlowRef.current);
   }, [revision]);
 
   useEffect(() => {
@@ -126,6 +131,12 @@ export function SchemaCanvas({
       edgeTypes={edgeTypes}
       onInit={(instance) => {
         reactFlowRef.current = instance;
+        if (initialFitPendingRef.current) {
+          requestAnimationFrame(() => {
+            fitCanvas(instance);
+          });
+          initialFitPendingRef.current = false;
+        }
       }}
       onNodeClick={(_, node) => {
         onSelectNode(node.id);
