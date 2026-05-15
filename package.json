@@ -11,6 +11,7 @@
     "py:genschema": "python python-server/genschema_server.py"
   },
   "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lint": "^6.9.6",
     "@fastify/static": "^9.1.3",

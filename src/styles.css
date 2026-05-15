@@ -1848,6 +1848,48 @@ button.is-active {
   word-break: break-word;
 }
 
+.schema-viewer__pointer-code {
+  display: block;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 16, 22, 0.96);
+}
+
+.schema-viewer__pointer-editor {
+  width: 100%;
+  min-width: 0;
+}
+
+.schema-viewer__pointer-editor .cm-editor {
+  background: transparent;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    Menlo,
+    monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.schema-viewer__pointer-editor .cm-scroller {
+  overflow: auto;
+  font: inherit;
+  line-height: inherit;
+}
+
+.schema-viewer__pointer-editor .cm-content {
+  padding: 0.65rem 0.9rem;
+  caret-color: #ffffff;
+  white-space: pre;
+}
+
+.schema-viewer__pointer-editor .cm-focused {
+  outline: none;
+}
+
 .schema-viewer__json-preview {
   height: clamp(160px, 26vh, 420px);
   padding: 0;
@@ -1897,6 +1939,10 @@ button.is-active {
 .schema-editor__token--property-name {
   color: #5cc8ff;
   font-weight: 700;
+}
+
+.schema-editor__token--variable-name {
+  color: #5cc8ff;
 }
 
 .schema-editor__token--string {

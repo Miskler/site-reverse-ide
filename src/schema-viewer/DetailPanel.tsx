@@ -1,5 +1,9 @@
 import CodeMirror from '@uiw/react-codemirror';
-import { JSON_EDITOR_THEME, JSON_OUTPUT_EXTENSIONS } from '../lib/json-editor';
+import {
+  JSON_EDITOR_THEME,
+  JSON_OUTPUT_EXTENSIONS,
+  JSON_POINTER_EXTENSIONS,
+} from '../lib/json-editor';
 import { appToast } from '../lib/app-toast';
 import type { SelectionDetails } from './schema-types';
 import { formatJsonPointerForCode } from './pointer-format';
@@ -195,9 +199,19 @@ export function DetailPanel({ details, localJson, onClose }: DetailPanelProps) {
                 Copy code
               </button>
             </div>
-            <code className="schema-viewer__code-block">
-              {formatJsonPointerForCode(selectionDetails.jsonPointer, 'data')}
-            </code>
+            <div className="schema-viewer__pointer-code">
+              <CodeMirror
+                className="schema-viewer__pointer-editor"
+                value={formatJsonPointerForCode(selectionDetails.jsonPointer, 'data')}
+                height="2.6rem"
+                theme={JSON_EDITOR_THEME}
+                extensions={JSON_POINTER_EXTENSIONS}
+                editable={false}
+                readOnly
+                basicSetup={false}
+                spellCheck={false}
+              />
+            </div>
           </div>
         </div>
       </div>
