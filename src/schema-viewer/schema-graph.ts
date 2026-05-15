@@ -105,7 +105,7 @@ export function getSelectionDetails(
       description: node.description,
       facts: [node.subtitle, ...node.metaLines].filter(Boolean),
       schemaPointer: node.pointer,
-      jsonPointer: node.pointer,
+      jsonPointer: extractSourceJsonPointer(node.schema),
       schema: node.schema,
     };
   }
@@ -128,7 +128,7 @@ export function getSelectionDetails(
       ...row.detailLines,
     ].filter((value): value is string => Boolean(value)),
     schemaPointer: row.resolvedPointer ?? row.pointer,
-    jsonPointer: row.pointer,
+    jsonPointer: extractSourceJsonPointer(row.schema),
     schema: row.schema,
   };
 }
@@ -857,4 +857,46 @@ function collectUnsupportedWarnings(schema: JsonSchema, pointer: string, context
   for (const [key, childSchema] of Object.entries(schema.$defs ?? {})) {
     collectUnsupportedWarnings(childSchema, joinPointer(pointer, '$defs', key), context);
   }
+}
+
+function extractSourceJsonPointer(schema: JsonSchema): string {
+  const trigger = pickSourceTrigger(schema);
+
+  if (!trigger) {
+    return '#';
+  }
+
+  const tokens = trigger.split('/').filter(Boolean);
+
+  if (tokens.length === 0) {
+    return '#';
+  }
+
+  if (/^\d+$/.test(tokens[0] ?? '')) {
+    tokens.shift();
+  }
+
+  if (tokens.length === 0) {
+    return '#';
+  }
+
+  const encoded = tokens.map((token) => token.replace(/~/g, '~0').replace(/\//g, '~1'));
+  return `#/${encoded.join('/')}`;
+}
+
+function pickSourceTrigger(schema: JsonSchema): string | null {
+  const rawTrigger = (schema as { j2sElementTrigger?: unknown }).j2sElementTrigger;
+
+  if (!Array.isArray(rawTrigger)) {
+    return null;
+  }
+
+  const triggers = rawTrigger.filter((item): item is string => typeof item === 'string');
+
+  if (triggers.length === 0) {
+    return null;
+  }
+
+  const preferred = triggers.find((trigger) => trigger === '0' || trigger.startsWith('0/'));
+  return preferred ?? triggers[0] ?? null;
 }

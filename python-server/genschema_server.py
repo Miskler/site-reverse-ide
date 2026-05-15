@@ -33,7 +33,6 @@ DEFAULT_COMPARATOR_SPECS: list[dict[str, Any]] = [
     {"name": "enum"},
     {"name": "required"},
     {"name": "empty"},
-    {"name": "delete", "attribute": "j2sElementTrigger"},
     {"name": "delete", "attribute": "isPseudoArray"},
 ]
 
