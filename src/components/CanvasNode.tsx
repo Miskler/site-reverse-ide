@@ -22,8 +22,8 @@ export type CanvasNodeType = Node<CanvasNodeData, 'canvasNode'>;
 const TITLE_MEASURE_FONT = '400 16px "Aktsident Grotesk AG", "Manrope", "Segoe UI", sans-serif';
 const NODE_MIN_WIDTH = 260;
 const NODE_MAX_WIDTH = 720;
-const NODE_CHROME_WIDTH = 172;
-const NODE_TEXT_BUFFER = 48;
+const NODE_CHROME_WIDTH = 220;
+const NODE_TEXT_BUFFER = 34;
 
 let measurementContext: CanvasRenderingContext2D | null = null;
 

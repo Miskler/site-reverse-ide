@@ -1,8 +1,23 @@
 export const GRAPH_VERSION = 2;
 export const STORAGE_KEY = 'site-reverse-ide:graph-v2';
 
-export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
+export const HTTP_METHODS = [
+  'GET',
+  'POST',
+  'PUT',
+  'PATCH',
+  'DELETE',
+  'HEAD',
+  'OPTIONS',
+  'localStorage',
+  'cookies',
+  'sessionStorage',
+] as const;
 export type HttpMethod = (typeof HTTP_METHODS)[number];
+
+const HTTP_METHOD_LOOKUP = new Map(
+  HTTP_METHODS.map((method) => [method.toLowerCase(), method] as const),
+);
 
 export const DEFAULT_NODE_COLORS = [
   '#2f8f83',
@@ -90,8 +105,8 @@ export function normalizeHttpMethod(value: unknown, fallback: HttpMethod = 'GET'
     return fallback;
   }
 
-  const method = value.trim().toUpperCase();
-  return (HTTP_METHODS as readonly string[]).includes(method) ? (method as HttpMethod) : fallback;
+  const method = HTTP_METHOD_LOOKUP.get(value.trim().toLowerCase());
+  return method ?? fallback;
 }
 
 export function normalizePosition(

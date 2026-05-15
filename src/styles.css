@@ -49,10 +49,7 @@ body {
   min-height: 100vh;
   font-family: var(--font-body);
   color: var(--text);
-  background:
-    radial-gradient(circle at top left, rgba(47, 143, 131, 0.12), transparent 30%),
-    radial-gradient(circle at top right, rgba(239, 125, 87, 0.09), transparent 22%),
-    var(--bg);
+  background: var(--bg);
 }
 
 button,
@@ -942,7 +939,7 @@ button.is-active {
 
 .graph-node__chrome {
   display: grid;
-  grid-template-columns: 5.9rem minmax(0, 1fr) 2rem;
+  grid-template-columns: 8.8rem minmax(0, 1fr) 2rem;
   align-items: center;
   gap: 0.5rem;
   margin-left: 0.35rem;
