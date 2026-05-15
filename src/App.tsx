@@ -1028,7 +1028,7 @@ export function App() {
             }}
             className="canvas-flow"
           >
-            <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} />
+            <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={0.75} />
             <Controls />
           </ReactFlow>
         </div>

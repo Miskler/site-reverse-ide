@@ -861,7 +861,7 @@ button.is-active {
 }
 
 .canvas-flow .react-flow__background {
-  opacity: 0.9;
+  opacity: 0.1;
 }
 
 .canvas-flow .react-flow__controls {
