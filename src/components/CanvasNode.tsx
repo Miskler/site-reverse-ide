@@ -147,6 +147,9 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
         data.onOpenEditor(id);
       }}
     >
+      <header className="graph-node__drag-handle">
+      </header>
+
       <button
         type="button"
         className="graph-node__color-strip nodrag nopan"

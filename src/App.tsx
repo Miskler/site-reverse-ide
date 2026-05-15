@@ -452,6 +452,7 @@ export function App() {
         onUpdateNode: updateNodeById,
       },
       draggable: true,
+      dragHandle: '.graph-node__drag-handle',
       selectable: true,
     }));
   }
@@ -544,6 +545,7 @@ export function App() {
         onUpdateNode: updateNodeById,
       },
       draggable: true,
+      dragHandle: '.graph-node__drag-handle',
       selectable: true,
     };
 

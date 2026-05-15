@@ -892,6 +892,7 @@ button.is-active {
   box-shadow:
     0 8px 18px rgba(0, 0, 0, 0.38),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  cursor: default;
   user-select: none;
   overflow: visible;
   transition:
@@ -935,6 +936,33 @@ button.is-active {
     0 18px 34px rgba(0, 0, 0, 0.52),
     0 0 0 3px rgba(47, 143, 131, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.graph-node__drag-handle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-start;
+  width: auto;
+  min-height: 1.2rem;
+  margin: -0.95rem -0.95rem 0.55rem -1.2rem;
+  padding: 0.25rem 0.95rem 0.2rem 1.2rem;
+  border-radius: 14px 14px 0 0;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background-color: rgba(255, 255, 255, 0.02);
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.08) 1px, transparent 0);
+  background-size: 5px 5px;
+  background-position: 0 0;
+  color: #8f9eae;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.graph-node__drag-handle:active {
+  cursor: grabbing;
 }
 
 .graph-node__chrome {
