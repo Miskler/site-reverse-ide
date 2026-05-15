@@ -1,11 +1,9 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { DetailPanel } from './DetailPanel';
 import { SchemaCanvas } from './SchemaCanvas';
-import { SchemaSourcePanel } from './SchemaSourcePanel';
 import { layoutSchemaGraph, type NodePositions } from './layout';
 import { buildSchemaGraph, getSelectionDetails } from './schema-graph';
 import { SAMPLE_SCHEMA } from './sample-schema';
-import { storeSchemaSource } from '../lib/app-router';
 import { appToast } from '../lib/app-toast';
 import type {
   JsonSchema,
@@ -30,12 +28,6 @@ export function SchemaViewerPage({
   initialSource,
   onBackToGraph,
 }: SchemaViewerPageProps) {
-  const [sourceText, setSourceText] = useState(
-    initialSource?.trim() ? initialSource : DEFAULT_SCHEMA_TEXT,
-  );
-  const [sourceOrigin, setSourceOrigin] = useState(
-    initialSource?.trim() ? 'Route input' : 'Sample schema',
-  );
   const [graphModel, setGraphModel] = useState<SchemaGraphModel | null>(null);
   const [positions, setPositions] = useState<NodePositions>({});
   const [selection, setSelection] = useState<SchemaSelection | null>(null);
@@ -48,14 +40,11 @@ export function SchemaViewerPage({
     error: '',
     warning: '',
   });
+  const initialSchemaText = initialSource?.trim() ? initialSource : DEFAULT_SCHEMA_TEXT;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void applySchemaText(sourceText, sourceOrigin);
-    }, 180);
-
-    return () => window.clearTimeout(timer);
-  }, [sourceText]);
+    void applySchemaText(initialSchemaText);
+  }, [initialSchemaText]);
 
   const details = useMemo(
     () => (graphModel ? getSelectionDetails(graphModel, selection) : null),
@@ -161,7 +150,7 @@ export function SchemaViewerPage({
     );
   }
 
-  async function applySchemaText(text: string, origin: string) {
+  async function applySchemaText(text: string) {
     const request = requestCounter.current + 1;
     requestCounter.current = request;
 
@@ -234,7 +223,6 @@ export function SchemaViewerPage({
         setPositions(nextPositions);
         setSelection(null);
         setFocusNodeRequest(null);
-        setSourceOrigin(origin);
         setBusy(false);
         setRevision((value) => value + 1);
       });
@@ -246,8 +234,6 @@ export function SchemaViewerPage({
           showSchemaWarning(warning);
         });
       }
-
-      storeSchemaSource(text);
     } catch (error) {
       if (request !== requestCounter.current) {
         return;
@@ -260,75 +246,18 @@ export function SchemaViewerPage({
     }
   }
 
-  function handleSourceChange(value: string) {
-    setSourceText(value);
-    setSourceOrigin('Draft');
-    storeSchemaSource(value);
-  }
-
-  async function handlePaste() {
-    if (!navigator.clipboard?.readText) {
-      showSchemaToast('error', [
-        'Clipboard paste is unavailable in this browser context. Use a secure origin or paste manually.',
-      ]);
-      return;
-    }
-
-    try {
-      const clipboardText = await navigator.clipboard.readText();
-      if (!clipboardText.trim()) {
-        showSchemaToast('error', ['Clipboard is empty. Copy a JSON Schema document and try again.']);
-        return;
-      }
-
-      resetToastCache();
-      handleSourceChange(clipboardText);
-      appToast.message('Schema pasted from clipboard');
-    } catch (error) {
-      showSchemaToast('error', [
-        error instanceof Error
-          ? `Unable to read clipboard: ${error.message}`
-          : 'Unable to read clipboard.',
-      ]);
-    }
-  }
-
-  function handleClear() {
-    setSourceText('');
-    setSourceOrigin('Draft');
-    setGraphModel(null);
-    setPositions({});
-    setSelection(null);
-    resetToastCache();
-    storeSchemaSource('');
-    appToast.message('Schema cleared');
-  }
-
-  function handleReset() {
-    setSourceText(DEFAULT_SCHEMA_TEXT);
-    setSourceOrigin('Sample schema');
-    resetToastCache();
-    appToast.message('Sample schema loaded');
-  }
-
-  function handleApply() {
-    void applySchemaText(sourceText, sourceOrigin || 'Draft');
-  }
-
   return (
     <div className="schema-viewer-shell">
-      <SchemaSourcePanel
-        sourceText={sourceText}
-        sourceOrigin={sourceOrigin}
-        busy={busy}
-        hasDefaultSchema={Boolean(DEFAULT_SCHEMA_TEXT)}
-        onBackToGraph={onBackToGraph}
-        onSourceChange={handleSourceChange}
-        onPaste={() => void handlePaste()}
-        onClear={handleClear}
-        onApply={handleApply}
-        onReset={handleReset}
-      />
+      <div className="schema-viewer-shell__topbar">
+        <div className="schema-viewer-shell__topbar-copy">
+          <p className="schema-viewer__eyebrow">Schema Viewer</p>
+          <h1 className="schema-viewer__title schema-viewer__title--compact">JSON Schema Viewer</h1>
+        </div>
+
+        <button type="button" onClick={onBackToGraph}>
+          Back to graph
+        </button>
+      </div>
 
       <main className="schema-viewer-shell__canvas">
         {graphModel ? (
