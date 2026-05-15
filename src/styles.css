@@ -1319,6 +1319,60 @@ button.is-active {
   box-shadow: var(--shadow-soft);
 }
 
+.app-toast {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(12, 16, 22, 0.98);
+  color: #edf3f7;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.app-toast__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.app-toast .Toastify__progress-bar--wrp {
+  height: 2px;
+}
+
+.app-toast .Toastify__progress-bar--bg {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.app-toast__progress {
+  background: rgba(88, 164, 255, 0.72);
+  border-radius: 999px;
+}
+
+.app-toast__title {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.app-toast__description {
+  color: #b7c2ce;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.app-toast .Toastify__close-button {
+  align-self: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #edf3f7;
+  opacity: 0.85;
+  padding: 0.15rem;
+}
+
+.app-toast .Toastify__close-button:hover {
+  opacity: 1;
+}
+
 .schema-viewer-shell {
   display: grid;
   grid-template-columns: minmax(320px, 360px) minmax(0, 1fr) minmax(290px, 340px);
@@ -1454,37 +1508,6 @@ button.is-active {
 .schema-viewer__actions {
   display: flex;
   justify-content: flex-end;
-}
-
-.schema-viewer__message {
-  padding: 0.9rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.schema-viewer__message--error {
-  border-color: rgba(208, 79, 69, 0.22);
-  background: rgba(208, 79, 69, 0.08);
-}
-
-.schema-viewer__message--warning {
-  border-color: rgba(192, 123, 26, 0.22);
-  background: rgba(192, 123, 26, 0.08);
-}
-
-.schema-viewer__message-title {
-  margin-bottom: 0.45rem;
-  color: #edf3f7;
-  font-size: 0.82rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.schema-viewer__message ul {
-  margin: 0;
-  padding-left: 1.1rem;
-  color: #d8e0e8;
 }
 
 .schema-viewer__facts {

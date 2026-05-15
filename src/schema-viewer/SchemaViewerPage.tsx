@@ -6,6 +6,7 @@ import { layoutSchemaGraph, type NodePositions } from './layout';
 import { buildSchemaGraph, getSelectionDetails } from './schema-graph';
 import { SAMPLE_SCHEMA } from './sample-schema';
 import { storeSchemaSource } from '../lib/app-router';
+import { appToast } from '../lib/app-toast';
 import type {
   JsonSchema,
   SchemaGraphModel,
@@ -33,11 +34,13 @@ export function SchemaViewerPage({
   const [graphModel, setGraphModel] = useState<SchemaGraphModel | null>(null);
   const [positions, setPositions] = useState<NodePositions>({});
   const [selection, setSelection] = useState<SchemaSelection | null>(null);
-  const [warnings, setWarnings] = useState<string[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(true);
   const [revision, setRevision] = useState(0);
   const requestCounter = useRef(0);
+  const toastCache = useRef({
+    error: '',
+    warning: '',
+  });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -52,6 +55,35 @@ export function SchemaViewerPage({
     [graphModel, selection],
   );
 
+  function resetToastCache() {
+    toastCache.current.error = '';
+    toastCache.current.warning = '';
+  }
+
+  function showSchemaToast(kind: 'error' | 'warning', messages: string[]) {
+    if (messages.length === 0) {
+      return;
+    }
+
+    const signature = `${kind}:${messages.join('\u001f')}`;
+
+    if (toastCache.current[kind] === signature) {
+      return;
+    }
+
+    toastCache.current[kind] = signature;
+
+    const [primary, ...rest] = messages;
+    const description = rest.length > 0 ? rest.join('; ') : undefined;
+
+    if (kind === 'error') {
+      appToast.error(primary, description);
+      return;
+    }
+
+    appToast.warning(primary, description);
+  }
+
   async function applySchemaText(text: string, origin: string) {
     const request = requestCounter.current + 1;
     requestCounter.current = request;
@@ -64,11 +96,10 @@ export function SchemaViewerPage({
       }
 
       setBusy(false);
-      setErrors(['Schema input is empty.']);
-      setWarnings([]);
       setGraphModel(null);
       setPositions({});
       setSelection(null);
+      resetToastCache();
       return;
     }
 
@@ -82,10 +113,9 @@ export function SchemaViewerPage({
       }
 
       setBusy(false);
-      setErrors([
+      showSchemaToast('error', [
         error instanceof Error ? error.message : 'Schema input is not valid JSON.',
       ]);
-      setWarnings([]);
       return;
     }
 
@@ -95,8 +125,7 @@ export function SchemaViewerPage({
       }
 
       setBusy(false);
-      setErrors(['JSON Schema viewer expects the root value to be a JSON object.']);
-      setWarnings([]);
+      showSchemaToast('error', ['JSON Schema viewer expects the root value to be a JSON object.']);
       return;
     }
 
@@ -109,8 +138,7 @@ export function SchemaViewerPage({
       }
 
       setBusy(false);
-      setErrors(validation.errors);
-      setWarnings([]);
+      showSchemaToast('error', validation.errors);
       return;
     }
 
@@ -128,12 +156,16 @@ export function SchemaViewerPage({
         setGraphModel(model);
         setPositions(nextPositions);
         setSelection(null);
-        setWarnings(model.warnings);
-        setErrors([]);
         setSourceOrigin(origin);
         setBusy(false);
         setRevision((value) => value + 1);
       });
+
+      resetToastCache();
+
+      if (model.warnings.length > 0) {
+        showSchemaToast('warning', model.warnings);
+      }
 
       storeSchemaSource(text);
     } catch (error) {
@@ -142,7 +174,7 @@ export function SchemaViewerPage({
       }
 
       setBusy(false);
-      setErrors([
+      showSchemaToast('error', [
         error instanceof Error ? error.message : 'Unable to build schema graph.',
       ]);
     }
@@ -156,7 +188,7 @@ export function SchemaViewerPage({
 
   async function handlePaste() {
     if (!navigator.clipboard?.readText) {
-      setErrors([
+      showSchemaToast('error', [
         'Clipboard paste is unavailable in this browser context. Use a secure origin or paste manually.',
       ]);
       return;
@@ -165,13 +197,15 @@ export function SchemaViewerPage({
     try {
       const clipboardText = await navigator.clipboard.readText();
       if (!clipboardText.trim()) {
-        setErrors(['Clipboard is empty. Copy a JSON Schema document and try again.']);
+        showSchemaToast('error', ['Clipboard is empty. Copy a JSON Schema document and try again.']);
         return;
       }
 
+      resetToastCache();
       handleSourceChange(clipboardText);
+      appToast.message('Schema pasted from clipboard');
     } catch (error) {
-      setErrors([
+      showSchemaToast('error', [
         error instanceof Error
           ? `Unable to read clipboard: ${error.message}`
           : 'Unable to read clipboard.',
@@ -185,14 +219,16 @@ export function SchemaViewerPage({
     setGraphModel(null);
     setPositions({});
     setSelection(null);
-    setWarnings([]);
-    setErrors([]);
+    resetToastCache();
     storeSchemaSource('');
+    appToast.message('Schema cleared');
   }
 
   function handleReset() {
     setSourceText(DEFAULT_SCHEMA_TEXT);
     setSourceOrigin('Sample schema');
+    resetToastCache();
+    appToast.message('Sample schema loaded');
   }
 
   function handleApply() {
@@ -206,8 +242,6 @@ export function SchemaViewerPage({
         sourceOrigin={sourceOrigin}
         busy={busy}
         hasDefaultSchema={Boolean(DEFAULT_SCHEMA_TEXT)}
-        errors={errors}
-        warnings={warnings}
         onBackToGraph={onBackToGraph}
         onSourceChange={handleSourceChange}
         onPaste={() => void handlePaste()}

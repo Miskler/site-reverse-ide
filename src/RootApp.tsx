@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ToastContainer } from 'react-toastify';
 import { App as GraphEditorApp } from './App';
 import { SchemaViewerPage } from './schema-viewer/SchemaViewerPage';
 import {
@@ -7,6 +8,22 @@ import {
   resolveAppRoute,
   type AppRoute,
 } from './lib/app-router';
+
+const TOAST_CONTAINER_OPTIONS = {
+  position: 'bottom-right' as const,
+  autoClose: 4500,
+  closeButton: true,
+  closeOnClick: false,
+  draggable: 'touch' as const,
+  hideProgressBar: false,
+  icon: false as const,
+  limit: 3,
+  pauseOnHover: true,
+  pauseOnFocusLoss: true,
+  theme: 'dark' as const,
+  toastClassName: 'app-toast',
+  progressClassName: 'app-toast__progress',
+};
 
 export function RootApp() {
   const [route, setRoute] = useState<AppRoute>(() =>
@@ -38,26 +55,27 @@ export function RootApp() {
     setRoute({ kind: 'graph' });
   }, []);
 
-  if (route.kind === 'schema') {
-    return (
-      <SchemaViewerPage
-        initialSource={route.initialSource}
-        onBackToGraph={backToGraph}
-      />
-    );
-  }
-
   return (
-    <div className="root-app-shell">
-      <button
-        type="button"
-        className="root-app-shell__route-switch"
-        onClick={() => openSchemaViewer()}
-        title="Открыть просмотр JSON Schema"
-      >
-        JSON Schema
-      </button>
-      <GraphEditorApp />
-    </div>
+    <>
+      <ToastContainer {...TOAST_CONTAINER_OPTIONS} />
+      {route.kind === 'schema' ? (
+        <SchemaViewerPage
+          initialSource={route.initialSource}
+          onBackToGraph={backToGraph}
+        />
+      ) : (
+        <div className="root-app-shell">
+          <button
+            type="button"
+            className="root-app-shell__route-switch"
+            onClick={() => openSchemaViewer()}
+            title="Открыть просмотр JSON Schema"
+          >
+            JSON Schema
+          </button>
+          <GraphEditorApp />
+        </div>
+      )}
+    </>
   );
 }

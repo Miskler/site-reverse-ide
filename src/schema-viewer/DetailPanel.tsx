@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { JSON_EDITOR_THEME, JSON_OUTPUT_EXTENSIONS } from '../lib/json-editor';
+import { appToast } from '../lib/app-toast';
 import type { SelectionDetails } from './schema-types';
 
 interface DetailPanelProps {
@@ -11,12 +11,7 @@ interface DetailPanelProps {
 const INSPECTOR_JSON_HEIGHT = 'clamp(220px, 32vh, 420px)';
 
 export function DetailPanel({ details, onClose }: DetailPanelProps) {
-  const [copied, setCopied] = useState(false);
   const currentDetails = details;
-
-  useEffect(() => {
-    setCopied(false);
-  }, [details]);
 
   if (!currentDetails) {
     return (
@@ -35,9 +30,9 @@ export function DetailPanel({ details, onClose }: DetailPanelProps) {
   async function copyPointer() {
     try {
       await navigator.clipboard.writeText(selectionDetails.schemaPointer);
-      setCopied(true);
+      appToast.success('Pointer copied');
     } catch {
-      setCopied(false);
+      appToast.error('Unable to copy pointer');
     }
   }
 
@@ -74,7 +69,7 @@ export function DetailPanel({ details, onClose }: DetailPanelProps) {
         <div className="schema-viewer__section-head">
           <span className="schema-viewer__label">Schema pointer</span>
           <button type="button" onClick={() => void copyPointer()}>
-            {copied ? 'Copied' : 'Copy'}
+            Copy
           </button>
         </div>
         <code className="schema-viewer__code-block">{selectionDetails.schemaPointer}</code>

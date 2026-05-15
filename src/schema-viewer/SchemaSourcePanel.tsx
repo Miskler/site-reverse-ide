@@ -6,8 +6,6 @@ interface SchemaSourcePanelProps {
   sourceOrigin: string;
   busy: boolean;
   hasDefaultSchema: boolean;
-  errors: string[];
-  warnings: string[];
   onBackToGraph: () => void;
   onSourceChange: (value: string) => void;
   onPaste: () => void | Promise<void>;
@@ -21,8 +19,6 @@ export function SchemaSourcePanel({
   sourceOrigin,
   busy,
   hasDefaultSchema,
-  errors,
-  warnings,
   onBackToGraph,
   onSourceChange,
   onPaste,
@@ -85,28 +81,6 @@ export function SchemaSourcePanel({
           {busy ? 'Rendering...' : 'Render schema'}
         </button>
       </div>
-
-      {errors.length > 0 ? (
-        <div className="schema-viewer__message schema-viewer__message--error">
-          <div className="schema-viewer__message-title">Errors</div>
-          <ul>
-            {errors.map((error) => (
-              <li key={error}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {warnings.length > 0 ? (
-        <div className="schema-viewer__message schema-viewer__message--warning">
-          <div className="schema-viewer__message-title">Warnings</div>
-          <ul>
-            {warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </aside>
   );
 }
