@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { ToastContainer } from 'react-toastify';
 import { App as GraphEditorApp } from './App';
+import { SchemaNavigationPanel } from './schema-viewer/SchemaNavigationPanel';
 import { SchemaViewerPage } from './schema-viewer/SchemaViewerPage';
 import {
-  pushGraphRoute,
   pushSchemaNodeRoute,
   resolveAppRoute,
   type AppRoute,
 } from './lib/app-router';
-import { STORAGE_KEY, createDefaultGraph, sanitizeGraphDocument } from './shared/graph';
+import { GRAPH_UPDATED_EVENT } from './lib/graph-events';
+import { loadGraphDocument } from './lib/graph-store';
+import type { GraphDocument } from './shared/graph';
 
 const TOAST_CONTAINER_OPTIONS = {
   position: 'bottom-right' as const,
@@ -30,6 +32,13 @@ export function RootApp() {
   const [route, setRoute] = useState<AppRoute>(() =>
     resolveAppRoute(window.location.pathname, window.history.state),
   );
+  const [graphDocument, setGraphDocument] = useState<GraphDocument | null>(null);
+  const [graphBusy, setGraphBusy] = useState(true);
+  const [graphLoadError, setGraphLoadError] = useState<string | null>(null);
+  const [schemaMenuOpen, setSchemaMenuOpen] = useState(() => route.kind === 'schema');
+  const rootShellStyle: CSSProperties = {
+    '--root-nav-width': '320px',
+  } as CSSProperties;
 
   useEffect(() => {
     const handlePopState = () => {
@@ -49,64 +58,78 @@ export function RootApp() {
     window.history.replaceState(null, '', '/');
   }, [route]);
 
-  const openSchemaViewer = useCallback(() => {
-    const nodeUid = resolveFirstGraphNodeUid();
-    pushSchemaNodeRoute(nodeUid);
+  const navigateSchemaNode = useCallback((nodeUid: string, jsonIndex: number | null = null) => {
+    pushSchemaNodeRoute(nodeUid, jsonIndex);
+    setSchemaMenuOpen(true);
     setRoute(resolveAppRoute(window.location.pathname, window.history.state));
   }, []);
 
   const backToGraph = useCallback(() => {
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-
-    pushGraphRoute();
+    setSchemaMenuOpen(false);
     setRoute({ kind: 'graph' });
+    window.history.pushState(null, '', '/');
   }, []);
+
+  const loadSidebarGraph = useCallback(async () => {
+    setGraphBusy(true);
+
+    try {
+      const graph = await loadGraphDocument();
+      setGraphDocument(graph);
+      setGraphLoadError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load graph navigation.';
+      setGraphDocument(null);
+      setGraphLoadError(message);
+    } finally {
+      setGraphBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSidebarGraph();
+
+    const handleGraphUpdate = () => {
+      void loadSidebarGraph();
+    };
+
+    window.addEventListener(GRAPH_UPDATED_EVENT, handleGraphUpdate);
+    window.addEventListener('storage', handleGraphUpdate);
+
+    return () => {
+      window.removeEventListener(GRAPH_UPDATED_EVENT, handleGraphUpdate);
+      window.removeEventListener('storage', handleGraphUpdate);
+    };
+  }, [loadSidebarGraph]);
 
   return (
     <>
       <ToastContainer {...TOAST_CONTAINER_OPTIONS} />
-      {route.kind === 'schema' ? (
-        <SchemaViewerPage
-          nodeUid={route.nodeUid}
-          jsonIndex={route.jsonIndex}
-          onBackToGraph={backToGraph}
+      <div className="root-app-shell" style={rootShellStyle}>
+        <SchemaNavigationPanel
+          graph={graphDocument}
+          busy={graphBusy}
+          loadError={graphLoadError}
+          currentNodeUid={route.kind === 'schema' ? route.nodeUid : ''}
+          routeKind={route.kind}
+          isSchemaMenuOpen={schemaMenuOpen}
+          onGoToGraph={backToGraph}
+          onToggleSchemaMenu={() => setSchemaMenuOpen((value) => !value)}
+          onOpenSchemaNode={navigateSchemaNode}
         />
-      ) : (
-        <div className="root-app-shell">
-          <button
-            type="button"
-            className="root-app-shell__route-switch"
-            onClick={() => openSchemaViewer()}
-            title="Open schema viewer"
-          >
-            JSON Schema
-          </button>
-          <GraphEditorApp />
+
+        <div className="root-app-shell__content">
+          {route.kind === 'schema' ? (
+            <SchemaViewerPage
+              nodeUid={route.nodeUid}
+              jsonIndex={route.jsonIndex}
+              onNavigateSchemaNode={navigateSchemaNode}
+            />
+          ) : (
+            <GraphEditorApp />
+          )}
         </div>
-      )}
+      </div>
     </>
   );
-}
-
-function resolveFirstGraphNodeUid(): string {
-  const fallback = createDefaultGraph().nodes[0]?.uid ?? 'NODE';
-
-  if (typeof window === 'undefined') {
-    return fallback;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return fallback;
-    }
-
-    const graph = sanitizeGraphDocument(JSON.parse(raw) as unknown);
-    return graph.nodes[0]?.uid ?? fallback;
-  } catch {
-    return fallback;
-  }
 }

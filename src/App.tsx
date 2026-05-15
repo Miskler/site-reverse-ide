@@ -48,6 +48,7 @@ import {
 import { CanvasEdge } from './components/CanvasEdge';
 import { ColorPicker } from './components/ColorPicker';
 import { CanvasNode, type CanvasNodeType } from './components/CanvasNode';
+import { notifyGraphDocumentUpdated } from './lib/graph-events';
 
 type StatusTone = 'neutral' | 'success' | 'warning';
 
@@ -345,6 +346,7 @@ export function App() {
       applyDocument(nextGraph, { preserveSelection: false });
       setStatus('Граф загружен из сервера');
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextGraph));
+      notifyGraphDocumentUpdated();
     } catch (error) {
       console.warn('Server graph load failed, using local cache', error);
 
@@ -353,6 +355,7 @@ export function App() {
       applyDocument(nextGraph, { preserveSelection: false });
       setStatus(cached ? 'Граф загружен из локального кэша' : 'Создан новый demo-граф');
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextGraph));
+      notifyGraphDocumentUpdated();
     } finally {
       setHydrated(true);
     }
@@ -471,6 +474,7 @@ export function App() {
   function scheduleSave(nextNodes: CanvasNodeType[], nextEdges: FlowEdge[], message: string, tone: StatusTone = 'success') {
     const document = composeDocument(nextNodes, nextEdges);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(document));
+    notifyGraphDocumentUpdated();
     const saveRequestId = ++saveRequestIdRef.current;
 
     if (saveTimerRef.current) {
@@ -485,6 +489,7 @@ export function App() {
         }
 
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+        notifyGraphDocumentUpdated();
         setStatus(message, tone);
       } catch (error) {
         if (saveRequestId !== saveRequestIdRef.current) {

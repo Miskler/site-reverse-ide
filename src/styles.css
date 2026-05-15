@@ -100,7 +100,8 @@ button.is-active {
 
 .app-shell {
   display: block;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -351,7 +352,7 @@ button.is-active {
   min-width: 0;
   min-height: 0;
   padding: 0;
-  height: 100vh;
+  height: 100%;
 }
 
 .canvas-frame {
@@ -1529,20 +1530,20 @@ button.is-active {
 }
 
 .root-app-shell {
-  position: relative;
+  display: grid;
+  grid-template-columns: var(--root-nav-width, 320px) minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: visible;
+  background: var(--bg);
 }
 
-.root-app-shell__route-switch {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  z-index: 40;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  background: rgba(10, 14, 20, 0.88);
-  color: #edf3f7;
-  box-shadow: var(--shadow-soft);
+.root-app-shell__content {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .app-toast {
@@ -1619,9 +1620,8 @@ button.is-active {
 
 .schema-viewer-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 8px minmax(280px, var(--schema-viewer-details-width, 340px));
-  height: 100vh;
-  height: 100dvh;
+  grid-template-columns: minmax(0, 1fr) 8px minmax(260px, var(--schema-viewer-details-width, 340px));
+  height: 100%;
   min-height: 0;
   background: var(--bg);
   overflow: hidden;
@@ -1688,6 +1688,10 @@ button.is-active {
   background: var(--sidebar);
 }
 
+.schema-viewer__panel--details {
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .schema-viewer__eyebrow {
   margin: 0;
   text-transform: uppercase;
@@ -1749,6 +1753,204 @@ button.is-active {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.schema-viewer__global-nav {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 1rem;
+  background: var(--sidebar);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: visible;
+}
+
+.schema-viewer__nav-rail {
+  display: grid;
+  gap: 0.85rem;
+  width: 100%;
+  min-width: 0;
+  align-content: start;
+}
+
+.schema-viewer__nav-switch {
+  width: 100%;
+  min-height: 5.2rem;
+  padding: 1rem 1rem;
+  border-radius: 0;
+  border: 0;
+  background: rgba(255, 255, 255, 0.22);
+  color: #edf3f7;
+  font-size: 1rem;
+  font-weight: 500;
+  text-align: left;
+  box-shadow: none;
+}
+
+.schema-viewer__nav-switch:hover {
+  filter: brightness(1.02);
+}
+
+.schema-viewer__nav-switch.is-active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.schema-viewer__nav-popup {
+  position: absolute;
+  top: 1rem;
+  left: calc(100% + 0.85rem);
+  z-index: 24;
+  width: min(24rem, calc(100vw - var(--root-nav-width, 320px) - 2.5rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: 1rem 1rem 1.1rem;
+  border-radius: 0;
+  background: rgba(14, 16, 18, 0.98);
+  box-shadow: none;
+}
+
+.schema-viewer__nav-content {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+.schema-viewer__nav-content-head {
+  align-items: center;
+}
+
+.schema-viewer__nav-list {
+  display: grid;
+  gap: 0.8rem;
+  align-content: start;
+  min-height: 0;
+}
+
+.schema-viewer__nav-node {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.schema-viewer__nav-node.is-active {
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.schema-viewer__nav-node-main,
+.schema-viewer__nav-source {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.schema-viewer__nav-node-main {
+  align-items: start;
+}
+
+.schema-viewer__nav-node-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+  color: #edf3f7;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.schema-viewer__nav-node-uid {
+  color: #92a1b0;
+  font-size: 0.78rem;
+}
+
+.schema-viewer__nav-node-method {
+  color: #c7d2dd;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.schema-viewer__nav-source-list {
+  display: grid;
+  gap: 0.3rem;
+  padding-left: 1.55rem;
+}
+
+.schema-viewer__nav-source {
+  gap: 0.15rem;
+  text-align: left;
+  color: #edf3f7;
+}
+
+.schema-viewer__nav-source:hover .schema-viewer__nav-source-title,
+.schema-viewer__nav-source:hover .schema-viewer__nav-source-size {
+  color: #ffffff;
+}
+
+.schema-viewer__nav-source-title {
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
+.schema-viewer__nav-source-size {
+  color: #92a1b0;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.schema-viewer__nav-empty-sources {
+  color: #92a1b0;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.schema-viewer__nav-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #c7d2dd;
+  font-size: 0.74rem;
+}
+
+.schema-viewer__nav-state {
+  margin: 0;
+  color: #b5c1cd;
+  line-height: 1.5;
+}
+
+.schema-viewer__nav-state--error {
+  color: #ffb0a8;
+}
+
+.schema-viewer__source-select {
+  width: 100%;
+  min-width: 0;
+  height: 2.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 12, 18, 0.94);
+  color: #edf3f7;
+  padding: 0 0.75rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  outline: none;
+}
+
+.schema-viewer__source-select:focus-visible {
+  border-color: rgba(47, 143, 131, 0.32);
+  box-shadow: 0 0 0 4px rgba(47, 143, 131, 0.1);
 }
 
 .schema-viewer__toolbar button,
@@ -2111,8 +2313,36 @@ button.is-active {
 }
 
 @media (max-width: 920px) {
+  .root-app-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .schema-viewer__global-nav {
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .schema-viewer__nav-popup {
+    position: static;
+    width: 100%;
+    max-height: min(42vh, calc(100vh - 6rem));
+  }
+
   .schema-viewer-shell {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .schema-viewer__panel--nav {
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    max-height: 40vh;
   }
 
   .schema-viewer__panel--details {
@@ -2121,11 +2351,5 @@ button.is-active {
 
   .schema-viewer-shell__resizer {
     display: none;
-  }
-
-  .root-app-shell__route-switch {
-    top: auto;
-    bottom: 1rem;
-    right: 1rem;
   }
 }

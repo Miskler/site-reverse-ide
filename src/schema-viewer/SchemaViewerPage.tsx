@@ -15,11 +15,9 @@ import { buildSchemaGraph, getSelectionDetails } from './schema-graph';
 import { validateSchemaDocument } from './schema-validation';
 import { appToast } from '../lib/app-toast';
 import { readIntegerCookie, writeCookie } from '../lib/cookies';
+import { loadGraphDocument } from '../lib/graph-store';
 import {
-  STORAGE_KEY,
-  createDefaultGraph,
   createNodeRawJson,
-  sanitizeGraphDocument,
   type GraphDocument,
 } from '../shared/graph';
 import type { JsonSchema, SchemaGraphModel, SchemaSelection } from './schema-types';
@@ -32,23 +30,10 @@ interface FocusNodeRequest {
 interface SchemaViewerPageProps {
   nodeUid: string;
   jsonIndex: number | null;
-  onBackToGraph: () => void;
+  onNavigateSchemaNode: (nodeUid: string, jsonIndex?: number | null) => void;
 }
 
 const api = {
-  async loadGraph(): Promise<unknown> {
-    const response = await fetch('/api/graph', {
-      headers: {
-        Accept: 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to load graph (${response.status})`);
-    }
-
-    return response.json();
-  },
   async generateSchema(documents: string[]): Promise<JsonSchema> {
     const response = await fetch(buildGenschemaUrl('/api/genschema'), {
       method: 'POST',
@@ -84,7 +69,7 @@ const api = {
 
 const DETAILS_PANEL_WIDTH_COOKIE = 'site-reverse-ide-schema-viewer-details-width';
 const DETAILS_PANEL_DEFAULT_WIDTH = 340;
-const DETAILS_PANEL_MIN_WIDTH = 280;
+const DETAILS_PANEL_MIN_WIDTH = 260;
 const DETAILS_PANEL_MAX_WIDTH = 680;
 const DETAILS_PANEL_MIN_CANVAS_WIDTH = 420;
 const DETAILS_PANEL_RESIZER_WIDTH = 8;
@@ -99,11 +84,12 @@ function buildGenschemaUrl(pathname: string): string {
 export function SchemaViewerPage({
   nodeUid,
   jsonIndex,
-  onBackToGraph,
+  onNavigateSchemaNode,
 }: SchemaViewerPageProps) {
   const [detailsWidth, setDetailsWidth] = useState<number>(() =>
     getInitialDetailsWidth(),
   );
+  const [graphDocument, setGraphDocument] = useState<GraphDocument | null>(null);
   const [graphModel, setGraphModel] = useState<SchemaGraphModel | null>(null);
   const [positions, setPositions] = useState<NodePositions>({});
   const [selection, setSelection] = useState<SchemaSelection | null>(null);
@@ -134,6 +120,13 @@ export function SchemaViewerPage({
     () => (graphModel ? getSelectionDetails(graphModel, selection) : null),
     [graphModel, selection],
   );
+
+  const currentNode = useMemo(
+    () => (graphDocument ? findGraphNode(graphDocument, nodeUid) : null),
+    [graphDocument, nodeUid],
+  );
+
+  const sourceOptions = useMemo(() => buildSourceOptions(currentNode), [currentNode]);
 
   const shellStyle = useMemo<CSSProperties>(
     () =>
@@ -452,6 +445,8 @@ export function SchemaViewerPage({
         return;
       }
 
+      setGraphDocument(graph);
+
       const node = findGraphNode(graph, nodeUid);
       if (!node) {
         setBusy(false);
@@ -541,43 +536,16 @@ export function SchemaViewerPage({
         onPointerDown={handleResizePointerDown}
       />
 
-      <DetailPanel details={details} localJson={localJson} onClose={() => setSelection(null)} />
+      <DetailPanel
+        details={details}
+        localJson={localJson}
+        sourceOptions={sourceOptions}
+        selectedSourceValue={jsonIndex}
+        onSelectSource={(value) => onNavigateSchemaNode(nodeUid, value)}
+        onClose={() => setSelection(null)}
+      />
     </div>
   );
-}
-
-function readCachedGraphDocument(): GraphDocument | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    return sanitizeGraphDocument(JSON.parse(raw) as unknown);
-  } catch {
-    return null;
-  }
-}
-
-async function loadGraphDocument(): Promise<GraphDocument> {
-  try {
-    const remote = await api.loadGraph();
-    const graph = sanitizeGraphDocument(remote);
-
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(graph));
-    }
-
-    return graph;
-  } catch (error) {
-    console.warn('Schema viewer graph load failed, using cache', error);
-
-    return readCachedGraphDocument() ?? createDefaultGraph();
-  }
 }
 
 function findGraphNode(graph: GraphDocument, nodeUid: string) {
@@ -635,6 +603,25 @@ function resolveNodeLocalJson(
   }
 
   return sources[jsonIndex] ?? sources[0] ?? null;
+}
+
+function buildSourceOptions(node: GraphDocument['nodes'][number] | null): Array<{
+  label: string;
+  value: number | null;
+}> {
+  if (!node) {
+    return [];
+  }
+
+  const sourceCount = Math.max(1, node.rawJsons.length);
+
+  return [
+    { label: 'Overview', value: null },
+    ...Array.from({ length: sourceCount }, (_, index) => ({
+      label: `JSON ${index + 1}`,
+      value: index,
+    })),
+  ];
 }
 
 function getInitialDetailsWidth(): number {
