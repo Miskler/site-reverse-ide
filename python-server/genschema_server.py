@@ -74,6 +74,26 @@ def normalize_float(value: Any, fallback: float) -> float:
     return fallback
 
 
+def unfold_stringified_json(value: Any) -> Any:
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("{") or text.startswith("["):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                return value
+            return unfold_stringified_json(parsed)
+        return value
+
+    if isinstance(value, list):
+        return [unfold_stringified_json(item) for item in value]
+
+    if is_record(value):
+        return {key: unfold_stringified_json(item) for key, item in value.items()}
+
+    return value
+
+
 def read_package_version() -> str:
     try:
         return package_version("genschema")
@@ -201,10 +221,11 @@ def add_input(converter: Converter, kind: str, value: Any, index: int) -> None:
     resource_id = str(index + 1)
 
     if kind == "json":
-        if isinstance(value, str):
-            converter._jsons.append(Resource(resource_id, "json", value))
+        normalized_value = unfold_stringified_json(value)
+        if isinstance(normalized_value, str):
+            converter._jsons.append(Resource(resource_id, "json", normalized_value))
             return
-        converter.add_json(value)
+        converter.add_json(normalized_value)
         return
 
     if kind == "schema":
