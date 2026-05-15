@@ -105,6 +105,7 @@ export function getSelectionDetails(
       description: node.description,
       facts: [node.subtitle, ...node.metaLines].filter(Boolean),
       schemaPointer: node.pointer,
+      jsonPointer: node.pointer,
       schema: node.schema,
     };
   }
@@ -127,6 +128,7 @@ export function getSelectionDetails(
       ...row.detailLines,
     ].filter((value): value is string => Boolean(value)),
     schemaPointer: row.resolvedPointer ?? row.pointer,
+    jsonPointer: row.pointer,
     schema: row.schema,
   };
 }

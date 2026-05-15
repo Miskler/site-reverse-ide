@@ -1720,6 +1720,7 @@ button.is-active {
 .schema-viewer__toolbar button,
 .schema-viewer__field-actions button,
 .schema-viewer__section-head button,
+.schema-viewer__pointer-head button,
 .schema-viewer__detail-header button {
   padding: 0.62rem 0.85rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1765,6 +1766,30 @@ button.is-active {
   display: grid;
   gap: 0.6rem;
   padding-top: 0.25rem;
+}
+
+.schema-viewer__pointer-stack {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.schema-viewer__pointer-item {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.schema-viewer__pointer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.schema-viewer__pointer-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .schema-viewer__code-block,

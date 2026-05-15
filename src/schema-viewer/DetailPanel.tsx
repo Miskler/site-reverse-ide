@@ -2,6 +2,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { JSON_EDITOR_THEME, JSON_OUTPUT_EXTENSIONS } from '../lib/json-editor';
 import { appToast } from '../lib/app-toast';
 import type { SelectionDetails } from './schema-types';
+import { formatJsonPointerForCode } from './pointer-format';
 
 interface DetailPanelProps {
   details: SelectionDetails | null;
@@ -36,6 +37,15 @@ export function DetailPanel({ details, onClose }: DetailPanelProps) {
     }
   }
 
+  async function copyJsonPointer() {
+    try {
+      await navigator.clipboard.writeText(formatJsonPointerForCode(selectionDetails.jsonPointer));
+      appToast.success('JSON path copied');
+    } catch {
+      appToast.error('Unable to copy JSON path');
+    }
+  }
+
   return (
     <aside className="schema-viewer__panel schema-viewer__panel--details">
       <div className="schema-viewer__detail-header">
@@ -57,12 +67,32 @@ export function DetailPanel({ details, onClose }: DetailPanelProps) {
 
       <div className="schema-viewer__section">
         <div className="schema-viewer__section-head">
-          <span className="schema-viewer__label">Schema pointer</span>
+          <span className="schema-viewer__label">Pointers</span>
           <button type="button" onClick={() => void copyPointer()}>
-            Copy
+            Copy schema
           </button>
         </div>
-        <code className="schema-viewer__code-block">{selectionDetails.schemaPointer}</code>
+
+        <div className="schema-viewer__pointer-stack">
+          <div className="schema-viewer__pointer-item">
+            <div className="schema-viewer__pointer-head">
+              <span className="schema-viewer__pointer-label">Schema pointer</span>
+            </div>
+            <code className="schema-viewer__code-block">{selectionDetails.schemaPointer}</code>
+          </div>
+
+          <div className="schema-viewer__pointer-item">
+            <div className="schema-viewer__pointer-head">
+              <span className="schema-viewer__pointer-label">JSON pointer</span>
+              <button type="button" className="schema-viewer__pointer-copy" onClick={() => void copyJsonPointer()}>
+                Copy code
+              </button>
+            </div>
+            <code className="schema-viewer__code-block">
+              {formatJsonPointerForCode(selectionDetails.jsonPointer)}
+            </code>
+          </div>
+        </div>
       </div>
 
       <div className="schema-viewer__section">

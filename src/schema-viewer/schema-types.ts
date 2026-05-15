@@ -96,5 +96,6 @@ export interface SelectionDetails {
   description?: string;
   facts: string[];
   schemaPointer: string;
+  jsonPointer: string;
   schema: JsonSchema;
 }
