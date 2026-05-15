@@ -24,7 +24,7 @@ const TEXT_MEASURE_FONT = '400 16px "Aktsident Grotesk AG", "Manrope", "Segoe UI
 const NODE_MIN_WIDTH = 260;
 const NODE_MAX_WIDTH = 720;
 const METHOD_TRIGGER_EXTRA = 48;
-const NODE_CHROME_WIDTH = 80;
+const NODE_CHROME_WIDTH = 120;
 const NODE_TEXT_BUFFER = 34;
 const STORAGE_METHODS = new Set<HttpMethod>(['localStorage', 'cookies', 'sessionStorage']);
 
@@ -147,8 +147,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
         data.onOpenEditor(id);
       }}
     >
-      <header className="graph-node__drag-handle">
-      </header>
+      <header className="graph-node__drag-handle" />
 
       <button
         type="button"
@@ -239,6 +238,32 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
             event.stopPropagation();
           }}
         />
+
+        <button
+          type="button"
+          className="graph-node__settings-button nodrag nopan"
+          aria-label={`Параметры карточки ${title}`}
+          title="Параметры карточки"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            data.onOpenEditor(id);
+          }}
+          onMouseDown={(event) => {
+            event.stopPropagation();
+          }}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+          onDoubleClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <span className="graph-node__settings-icon" aria-hidden="true">
+            ⚙
+          </span>
+        </button>
 
         <button
           type="button"

@@ -939,6 +939,7 @@ button.is-active {
 }
 
 .graph-node__drag-handle {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -965,9 +966,37 @@ button.is-active {
   cursor: grabbing;
 }
 
+.graph-node__settings-button {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 12, 18, 0.94);
+  color: #8f9eae;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.graph-node__settings-button:hover {
+  filter: brightness(1.05);
+}
+
+.graph-node__settings-button:focus-visible {
+  outline: 1px solid rgba(47, 143, 131, 0.28);
+  outline-offset: 2px;
+}
+
+.graph-node__settings-icon {
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
 .graph-node__chrome {
   display: grid;
-  grid-template-columns: var(--method-trigger-width, 9rem) minmax(0, 1fr) 2rem;
+  grid-template-columns: var(--method-trigger-width, 9rem) minmax(0, 1fr) 2rem 2rem;
   align-items: center;
   gap: 0.5rem;
   margin-left: 0.35rem;
