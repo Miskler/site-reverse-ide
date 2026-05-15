@@ -24,7 +24,7 @@ const TEXT_MEASURE_FONT = '400 16px "Aktsident Grotesk AG", "Manrope", "Segoe UI
 const NODE_MIN_WIDTH = 260;
 const NODE_MAX_WIDTH = 720;
 const METHOD_TRIGGER_EXTRA = 48;
-const NODE_CHROME_WIDTH = 54;
+const NODE_CHROME_WIDTH = 80;
 const NODE_TEXT_BUFFER = 34;
 
 let measurementContext: CanvasRenderingContext2D | null = null;
