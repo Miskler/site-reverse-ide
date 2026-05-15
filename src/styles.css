@@ -1687,7 +1687,18 @@ button.is-active {
   gap: 0.5rem;
 }
 
-.schema-viewer__chip,
+.schema-viewer__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.38rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #c7d2dd;
+  font-size: 0.78rem;
+}
+
 .schema-viewer__badge {
   display: inline-flex;
   align-items: center;
@@ -1748,22 +1759,6 @@ button.is-active {
 .schema-viewer__actions {
   display: flex;
   justify-content: flex-end;
-}
-
-.schema-viewer__facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.schema-viewer__fact {
-  display: inline-flex;
-  padding: 0.36rem 0.65rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #c7d2dd;
-  font-size: 0.78rem;
 }
 
 .schema-viewer__section {

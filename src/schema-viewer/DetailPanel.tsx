@@ -55,16 +55,6 @@ export function DetailPanel({ details, onClose }: DetailPanelProps) {
         <p className="schema-viewer__description">{selectionDetails.description}</p>
       ) : null}
 
-      {selectionDetails.facts.length > 0 ? (
-        <div className="schema-viewer__facts">
-          {selectionDetails.facts.map((fact) => (
-            <span className="schema-viewer__fact" key={fact}>
-              {fact}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
       <div className="schema-viewer__section">
         <div className="schema-viewer__section-head">
           <span className="schema-viewer__label">Schema pointer</span>
