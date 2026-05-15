@@ -1,10 +1,20 @@
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { DetailPanel } from './DetailPanel';
 import { SchemaCanvas } from './SchemaCanvas';
 import { layoutSchemaGraph, type NodePositions } from './layout';
 import { buildSchemaGraph, getSelectionDetails } from './schema-graph';
 import { validateSchemaDocument } from './schema-validation';
 import { appToast } from '../lib/app-toast';
+import { readIntegerCookie, writeCookie } from '../lib/cookies';
 import {
   STORAGE_KEY,
   createDefaultGraph,
@@ -72,6 +82,15 @@ const api = {
   },
 };
 
+const DETAILS_PANEL_WIDTH_COOKIE = 'site-reverse-ide-schema-viewer-details-width';
+const DETAILS_PANEL_DEFAULT_WIDTH = 340;
+const DETAILS_PANEL_MIN_WIDTH = 280;
+const DETAILS_PANEL_MAX_WIDTH = 680;
+const DETAILS_PANEL_MIN_CANVAS_WIDTH = 420;
+const DETAILS_PANEL_RESIZER_WIDTH = 8;
+const DETAILS_PANEL_KEY_STEP = 24;
+const DETAILS_PANEL_KEY_STEP_FAST = 72;
+
 function buildGenschemaUrl(pathname: string): string {
   const baseUrl = import.meta.env.VITE_GENSCHEMA_URL?.trim() || 'http://127.0.0.1:8000';
   return new URL(pathname, baseUrl).toString();
@@ -82,6 +101,9 @@ export function SchemaViewerPage({
   jsonIndex,
   onBackToGraph,
 }: SchemaViewerPageProps) {
+  const [detailsWidth, setDetailsWidth] = useState<number>(() =>
+    getInitialDetailsWidth(),
+  );
   const [graphModel, setGraphModel] = useState<SchemaGraphModel | null>(null);
   const [positions, setPositions] = useState<NodePositions>({});
   const [selection, setSelection] = useState<SchemaSelection | null>(null);
@@ -90,8 +112,15 @@ export function SchemaViewerPage({
   const [localJson, setLocalJson] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const [focusNodeRequest, setFocusNodeRequest] = useState<FocusNodeRequest | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
   const requestCounter = useRef(0);
   const focusTokenCounter = useRef(0);
+  const resizeSessionRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const toastCache = useRef({
     error: '',
     warning: '',
@@ -106,9 +135,63 @@ export function SchemaViewerPage({
     [graphModel, selection],
   );
 
+  const shellStyle = useMemo<CSSProperties>(
+    () =>
+      ({
+        '--schema-viewer-details-width': `${detailsWidth}px`,
+      }) as CSSProperties,
+    [detailsWidth],
+  );
+
+  useEffect(() => {
+    writeCookie(DETAILS_PANEL_WIDTH_COOKIE, String(detailsWidth), {
+      maxAgeSeconds: 60 * 60 * 24 * 365,
+      path: '/',
+      sameSite: 'Lax',
+    });
+  }, [detailsWidth]);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      setDetailsWidth((current) => clampWidthForViewport(current, window.innerWidth));
+    };
+
+    handleWindowResize();
+    window.addEventListener('resize', handleWindowResize);
+
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, []);
+
+  useEffect(
+    () => () => {
+      resizeCleanupRef.current?.();
+      resizeCleanupRef.current = null;
+    },
+    [],
+  );
+
   function resetToastCache() {
     toastCache.current.error = '';
     toastCache.current.warning = '';
+  }
+
+  function clampDetailsWidth(value: number, viewportWidth: number): number {
+    const maxWidth = Math.max(
+      DETAILS_PANEL_MIN_WIDTH,
+      Math.min(DETAILS_PANEL_MAX_WIDTH, viewportWidth - DETAILS_PANEL_MIN_CANVAS_WIDTH),
+    );
+
+    return Math.round(Math.max(DETAILS_PANEL_MIN_WIDTH, Math.min(maxWidth, value)));
+  }
+
+  function setAndPersistDetailsWidth(nextWidth: number) {
+    const viewportWidth = typeof window === 'undefined' ? Number.POSITIVE_INFINITY : window.innerWidth;
+    const nextValue = clampDetailsWidth(nextWidth, viewportWidth);
+    setDetailsWidth(nextValue);
+  }
+
+  function getKeyboardResizeStep(event: ReactKeyboardEvent<HTMLDivElement>): number {
+    return event.shiftKey ? DETAILS_PANEL_KEY_STEP_FAST : DETAILS_PANEL_KEY_STEP;
   }
 
   function showSchemaToast(kind: 'error' | 'warning', messages: string[]) {
@@ -203,6 +286,96 @@ export function SchemaViewerPage({
       parsed.description,
       { toastId },
     );
+  }
+
+  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const session = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: detailsWidth,
+    };
+
+    resizeSessionRef.current = session;
+    setIsResizing(true);
+
+    const stopResize = () => {
+      if (resizeSessionRef.current?.pointerId !== session.pointerId) {
+        return;
+      }
+
+      resizeSessionRef.current = null;
+      setIsResizing(false);
+      resizeCleanupRef.current?.();
+      resizeCleanupRef.current = null;
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== session.pointerId) {
+        return;
+      }
+
+      const nextWidth = session.startWidth + (session.startX - moveEvent.clientX);
+      setAndPersistDetailsWidth(nextWidth);
+    };
+
+    const handlePointerUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== session.pointerId) {
+        return;
+      }
+
+      stopResize();
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    resizeCleanupRef.current = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+  }
+
+  function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const step = getKeyboardResizeStep(event);
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setAndPersistDetailsWidth(detailsWidth - step);
+      return;
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setAndPersistDetailsWidth(detailsWidth + step);
+      return;
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault();
+      setAndPersistDetailsWidth(DETAILS_PANEL_MIN_WIDTH);
+      return;
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault();
+      const viewportWidth = typeof window === 'undefined' ? Number.POSITIVE_INFINITY : window.innerWidth;
+      const maxWidth = Math.max(
+        DETAILS_PANEL_MIN_WIDTH,
+        Math.min(DETAILS_PANEL_MAX_WIDTH, viewportWidth - DETAILS_PANEL_MIN_CANVAS_WIDTH),
+      );
+      setAndPersistDetailsWidth(maxWidth);
+    }
   }
 
   async function applySchemaDocument(schema: JsonSchema, request: number) {
@@ -321,7 +494,10 @@ export function SchemaViewerPage({
   }
 
   return (
-    <div className="schema-viewer-shell">
+    <div
+      className={`schema-viewer-shell${isResizing ? ' schema-viewer-shell--resizing' : ''}`}
+      style={shellStyle}
+    >
       <main className="schema-viewer-shell__canvas">
         {graphModel ? (
           <SchemaCanvas
@@ -344,6 +520,26 @@ export function SchemaViewerPage({
           </div>
         )}
       </main>
+
+      <div
+        className={`schema-viewer-shell__resizer${isResizing ? ' is-resizing' : ''}`}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize inspector panel"
+        aria-valuemin={DETAILS_PANEL_MIN_WIDTH}
+        aria-valuemax={Math.max(
+          DETAILS_PANEL_MIN_WIDTH,
+          Math.min(
+            DETAILS_PANEL_MAX_WIDTH,
+            (typeof window === 'undefined' ? DETAILS_PANEL_MAX_WIDTH : window.innerWidth) -
+              DETAILS_PANEL_MIN_CANVAS_WIDTH,
+          ),
+        )}
+        aria-valuenow={detailsWidth}
+        tabIndex={0}
+        onKeyDown={handleResizeKeyDown}
+        onPointerDown={handleResizePointerDown}
+      />
 
       <DetailPanel details={details} localJson={localJson} onClose={() => setSelection(null)} />
     </div>
@@ -439,4 +635,21 @@ function resolveNodeLocalJson(
   }
 
   return sources[jsonIndex] ?? sources[0] ?? null;
+}
+
+function getInitialDetailsWidth(): number {
+  const storedWidth = readIntegerCookie(DETAILS_PANEL_WIDTH_COOKIE);
+  const viewportWidth = typeof window === 'undefined' ? DETAILS_PANEL_DEFAULT_WIDTH : window.innerWidth;
+  const fallbackWidth = storedWidth ?? DETAILS_PANEL_DEFAULT_WIDTH;
+
+  return clampWidthForViewport(fallbackWidth, viewportWidth);
+}
+
+function clampWidthForViewport(value: number, viewportWidth: number): number {
+  const maxWidth = Math.max(
+    DETAILS_PANEL_MIN_WIDTH,
+    Math.min(DETAILS_PANEL_MAX_WIDTH, viewportWidth - DETAILS_PANEL_MIN_CANVAS_WIDTH),
+  );
+
+  return Math.round(Math.max(DETAILS_PANEL_MIN_WIDTH, Math.min(maxWidth, value)));
 }

@@ -1619,8 +1619,10 @@ button.is-active {
 
 .schema-viewer-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(290px, 340px);
-  min-height: 100vh;
+  grid-template-columns: minmax(0, 1fr) 8px minmax(280px, var(--schema-viewer-details-width, 340px));
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   background: var(--bg);
   overflow: hidden;
 }
@@ -1628,7 +1630,42 @@ button.is-active {
 .schema-viewer-shell__canvas {
   position: relative;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   background: var(--bg-soft);
+}
+
+.schema-viewer-shell__resizer {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.schema-viewer-shell__resizer::after {
+  content: '';
+  position: absolute;
+  top: 0.75rem;
+  bottom: 0.75rem;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.schema-viewer-shell__resizer:hover,
+.schema-viewer-shell--resizing .schema-viewer-shell__resizer {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.schema-viewer-shell--resizing,
+.schema-viewer-shell--resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .schema-viewer-shell__empty {
@@ -1645,13 +1682,10 @@ button.is-active {
   flex-direction: column;
   gap: 0.9rem;
   min-width: 0;
+  min-height: 0;
   padding: 1.25rem;
   overflow: auto;
   background: var(--sidebar);
-}
-
-.schema-viewer__panel--details {
-  border-left: 1px solid var(--line);
 }
 
 .schema-viewer__eyebrow {
@@ -2036,6 +2070,10 @@ button.is-active {
   }
 
   .schema-viewer__panel--details {
+    display: none;
+  }
+
+  .schema-viewer-shell__resizer {
     display: none;
   }
 
