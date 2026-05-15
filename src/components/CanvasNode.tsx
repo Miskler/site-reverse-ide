@@ -1,6 +1,6 @@
 import { Handle, Position, useViewport, type Node, type NodeProps } from '@xyflow/react';
 import * as Select from '@radix-ui/react-select';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { HTTP_METHODS, type GraphNode, type HttpMethod } from '../shared/graph';
 
 type CanvasNodePatch = Partial<Pick<GraphNode, 'method' | 'title' | 'note' | 'color'>>;
@@ -46,6 +46,11 @@ function measureTextWidth(text: string): number {
 
   measurementContext.font = TEXT_MEASURE_FONT;
   return measurementContext.measureText(text).width;
+}
+
+function resizeTextareaHeight(textarea: HTMLTextAreaElement) {
+  textarea.style.height = 'auto';
+  textarea.style.height = `${textarea.scrollHeight}px`;
 }
 
 function MethodItem({ method }: { method: HttpMethod }) {
@@ -95,6 +100,7 @@ function MethodSelectContent() {
 export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
   const [isTitleFocused, setIsTitleFocused] = useState(false);
   const [isMethodSelectOpen, setIsMethodSelectOpen] = useState(false);
+  const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const titleText = data.title.trim();
   const title = titleText || 'Без названия';
   const titleValue = isTitleFocused ? data.title : title;
@@ -115,6 +121,15 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
       ),
     );
   }, [titleValue, methodTriggerWidth]);
+
+  useLayoutEffect(() => {
+    const noteInput = noteInputRef.current;
+    if (!noteInput) {
+      return;
+    }
+
+    resizeTextareaHeight(noteInput);
+  }, [data.note, nodeWidth]);
 
   return (
     <article
@@ -243,11 +258,12 @@ export function CanvasNode({ id, data, selected }: NodeProps<CanvasNodeType>) {
 
       <div className="graph-node__body">
         <textarea
+          ref={noteInputRef}
           className="graph-node__note-input nodrag nopan"
           value={data.note}
           aria-label={`Описание функции ${title}`}
           placeholder="Описание"
-          rows={3}
+          rows={1}
           onChange={(event) => {
             data.onUpdateNode(id, { note: event.target.value });
           }}

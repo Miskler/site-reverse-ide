@@ -884,7 +884,7 @@ button.is-active {
   position: relative;
   width: var(--node-width, min(280px, calc(100vw - 120px)));
   max-width: calc(100vw - 120px);
-  min-height: 144px;
+  min-height: 0;
   padding: 0.95rem 0.95rem 0.95rem 1.2rem;
   border-radius: 14px;
   background: rgba(11, 16, 23, 0.97);
@@ -1108,7 +1108,7 @@ button.is-active {
   color: var(--muted);
   line-height: 1.5;
   font-size: 0.9rem;
-  min-height: 4.2rem;
+  min-height: 0;
   resize: none;
   outline: none;
   overflow: hidden;
