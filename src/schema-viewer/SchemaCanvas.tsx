@@ -1,5 +1,6 @@
 import {
   ReactFlow,
+  Controls,
   type ReactFlowInstance,
 } from '@xyflow/react';
 import { useEffect, useMemo, useRef } from 'react';
@@ -137,6 +138,8 @@ export function SchemaCanvas({
       panOnScroll={false}
       zoomOnScroll
       className="schema-canvas"
-    />
+    >
+      <Controls />
+    </ReactFlow>
   );
 }
