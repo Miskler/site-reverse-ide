@@ -1815,7 +1815,7 @@ button.is-active {
 }
 
 .schema-viewer__json-preview {
-  height: clamp(220px, 32vh, 420px);
+  height: clamp(160px, 26vh, 420px);
   padding: 0;
   overflow: hidden;
   white-space: normal;

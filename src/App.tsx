@@ -160,6 +160,7 @@ const JSON_INPUT_EXTENSIONS = [
 ];
 
 const SCHEMA_EDITOR_HEIGHT = 'clamp(320px, 45vh, 520px)';
+const GRAPH_MIN_ZOOM = 0.1666666667;
 
 function formatSourceCount(count: number): string {
   const mod10 = count % 10;
@@ -321,6 +322,7 @@ export function App() {
       reactFlowInstance.fitView({
         padding: 0.18,
         duration: 300,
+        minZoom: GRAPH_MIN_ZOOM,
       });
     });
   }, [hydrated, nodes.length, reactFlowInstance]);
@@ -875,6 +877,7 @@ export function App() {
       reactFlowInstance?.fitView({
         padding: 0.18,
         duration: 300,
+        minZoom: GRAPH_MIN_ZOOM,
       });
       fittedRef.current = true;
     });
@@ -1004,6 +1007,7 @@ export function App() {
             panOnScroll={false}
             panActivationKeyCode="Control"
             zoomOnScroll
+            minZoom={GRAPH_MIN_ZOOM}
             defaultEdgeOptions={{
               type: 'canvasEdge',
             }}

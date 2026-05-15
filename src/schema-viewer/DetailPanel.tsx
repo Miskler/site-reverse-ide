@@ -9,7 +9,7 @@ interface DetailPanelProps {
   onClose: () => void;
 }
 
-const INSPECTOR_JSON_HEIGHT = 'clamp(220px, 32vh, 420px)';
+const INSPECTOR_JSON_HEIGHT = 'clamp(160px, 26vh, 420px)';
 
 export function DetailPanel({ details, onClose }: DetailPanelProps) {
   const currentDetails = details;

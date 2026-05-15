@@ -29,6 +29,8 @@ const edgeTypes = {
   relation: SchemaRelationEdge,
 };
 
+const SCHEMA_MIN_ZOOM = 0.0666666667;
+
 export function SchemaCanvas({
   model,
   positions,
@@ -46,7 +48,7 @@ export function SchemaCanvas({
     void instance.fitView({
       duration: 250,
       padding: 0.18,
-      minZoom: 0.2,
+      minZoom: SCHEMA_MIN_ZOOM,
       maxZoom: 1.15,
     });
   }
@@ -148,6 +150,7 @@ export function SchemaCanvas({
       panOnDrag
       panOnScroll={false}
       zoomOnScroll
+      minZoom={SCHEMA_MIN_ZOOM}
       className="schema-canvas"
     >
       <Controls />
