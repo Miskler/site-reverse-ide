@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
+import { JSON_EDITOR_THEME, JSON_OUTPUT_EXTENSIONS } from '../lib/json-editor';
 import type { SelectionDetails } from './schema-types';
 
 interface DetailPanelProps {
   details: SelectionDetails | null;
   onClose: () => void;
 }
+
+const INSPECTOR_JSON_HEIGHT = 'clamp(220px, 32vh, 420px)';
 
 export function DetailPanel({ details, onClose }: DetailPanelProps) {
   const [copied, setCopied] = useState(false);
@@ -80,9 +84,19 @@ export function DetailPanel({ details, onClose }: DetailPanelProps) {
         <div className="schema-viewer__section-head">
           <span className="schema-viewer__label">Schema JSON</span>
         </div>
-        <pre className="schema-viewer__json-preview">
-          {JSON.stringify(selectionDetails.schema, null, 2)}
-        </pre>
+        <div className="schema-viewer__json-preview">
+          <CodeMirror
+            className="schema-viewer__json-preview-editor"
+            value={JSON.stringify(selectionDetails.schema, null, 2)}
+            height={INSPECTOR_JSON_HEIGHT}
+            theme={JSON_EDITOR_THEME}
+            extensions={JSON_OUTPUT_EXTENSIONS}
+            editable={false}
+            readOnly
+            basicSetup={false}
+            spellCheck={false}
+          />
+        </div>
       </div>
     </aside>
   );

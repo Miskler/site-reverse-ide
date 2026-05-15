@@ -1518,13 +1518,84 @@ button.is-active {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(12, 16, 22, 0.96);
   color: #e8edf2;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    Menlo,
+    monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .schema-viewer__json-preview {
-  max-height: 32vh;
+  height: clamp(220px, 32vh, 420px);
+  padding: 0;
+  overflow: hidden;
+  white-space: normal;
+  word-break: normal;
+}
+
+.schema-viewer__json-preview-editor {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+}
+
+.schema-viewer__json-preview-editor .cm-editor {
+  height: 100%;
+  background: transparent;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    Menlo,
+    monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.schema-viewer__json-preview-editor .cm-scroller {
+  overflow: auto;
+  font: inherit;
+  line-height: inherit;
+}
+
+.schema-viewer__json-preview-editor .cm-content {
+  padding: 0.8rem 0.9rem;
+  caret-color: #ffffff;
+}
+
+.schema-viewer__json-preview-editor .cm-focused {
+  outline: none;
+}
+
+.schema-editor__token--property-name {
+  color: #5cc8ff;
+  font-weight: 700;
+}
+
+.schema-editor__token--string {
+  color: #7dffad;
+}
+
+.schema-editor__token--number {
+  color: #ffd166;
+}
+
+.schema-editor__token--boolean {
+  color: #ff8f70;
+}
+
+.schema-editor__token--null {
+  color: #c792ea;
+}
+
+.schema-editor__token--punctuation {
+  color: #e2e8f0;
 }
 
 .schema-canvas {
