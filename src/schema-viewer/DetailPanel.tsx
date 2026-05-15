@@ -6,12 +6,26 @@ import { formatJsonPointerForCode } from './pointer-format';
 
 interface DetailPanelProps {
   details: SelectionDetails | null;
+  localJson: string | null;
   onClose: () => void;
 }
 
 const INSPECTOR_JSON_HEIGHT = 'clamp(160px, 26vh, 420px)';
+const LOCAL_INSPECTOR_JSON_HEIGHT = 'clamp(120px, 20vh, 280px)';
 
-export function DetailPanel({ details, onClose }: DetailPanelProps) {
+function formatJsonForDisplay(value: string | null): string {
+  if (!value) {
+    return '';
+  }
+
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
+export function DetailPanel({ details, localJson, onClose }: DetailPanelProps) {
   const currentDetails = details;
 
   if (!currentDetails) {
@@ -104,6 +118,25 @@ export function DetailPanel({ details, onClose }: DetailPanelProps) {
             className="schema-viewer__json-preview-editor"
             value={JSON.stringify(selectionDetails.schema, null, 2)}
             height={INSPECTOR_JSON_HEIGHT}
+            theme={JSON_EDITOR_THEME}
+            extensions={JSON_OUTPUT_EXTENSIONS}
+            editable={false}
+            readOnly
+            basicSetup={false}
+            spellCheck={false}
+          />
+        </div>
+      </div>
+
+      <div className="schema-viewer__section">
+        <div className="schema-viewer__section-head">
+          <span className="schema-viewer__label">JSON (локальный)</span>
+        </div>
+        <div className="schema-viewer__json-preview schema-viewer__json-preview--local">
+          <CodeMirror
+            className="schema-viewer__json-preview-editor"
+            value={formatJsonForDisplay(localJson)}
+            height={LOCAL_INSPECTOR_JSON_HEIGHT}
             theme={JSON_EDITOR_THEME}
             extensions={JSON_OUTPUT_EXTENSIONS}
             editable={false}

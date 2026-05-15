@@ -1822,6 +1822,10 @@ button.is-active {
   word-break: normal;
 }
 
+.schema-viewer__json-preview--local {
+  height: clamp(120px, 20vh, 280px);
+}
+
 .schema-viewer__json-preview-editor {
   width: 100%;
   min-width: 0;

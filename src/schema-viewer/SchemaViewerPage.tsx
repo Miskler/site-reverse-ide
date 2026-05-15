@@ -87,6 +87,7 @@ export function SchemaViewerPage({
   const [selection, setSelection] = useState<SchemaSelection | null>(null);
   const [busy, setBusy] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [localJson, setLocalJson] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const [focusNodeRequest, setFocusNodeRequest] = useState<FocusNodeRequest | null>(null);
   const requestCounter = useRef(0);
@@ -264,6 +265,7 @@ export function SchemaViewerPage({
 
     setBusy(true);
     setLoadError(null);
+    setLocalJson(null);
     setGraphModel(null);
     setPositions({});
     setSelection(null);
@@ -286,6 +288,7 @@ export function SchemaViewerPage({
       }
 
       const documents = resolveNodeDocuments(node, jsonIndex);
+      setLocalJson(resolveNodeLocalJson(node, jsonIndex));
       if (documents.length === 0) {
         const message =
           jsonIndex === null
@@ -342,7 +345,7 @@ export function SchemaViewerPage({
         )}
       </main>
 
-      <DetailPanel details={details} onClose={() => setSelection(null)} />
+      <DetailPanel details={details} localJson={localJson} onClose={() => setSelection(null)} />
     </div>
   );
 }
@@ -410,4 +413,30 @@ function resolveNodeDocuments(
 
   const source = sources[jsonIndex];
   return source ? [source] : [];
+}
+
+function resolveNodeLocalJson(
+  node: GraphDocument['nodes'][number],
+  jsonIndex: number | null,
+): string | null {
+  const sources =
+    node.rawJsons.length > 0
+      ? node.rawJsons
+      : [
+          createNodeRawJson({
+            method: node.method,
+            title: node.title,
+            note: node.note,
+          }),
+        ];
+
+  if (sources.length === 0) {
+    return null;
+  }
+
+  if (jsonIndex === null) {
+    return sources[0] ?? null;
+  }
+
+  return sources[jsonIndex] ?? sources[0] ?? null;
 }
