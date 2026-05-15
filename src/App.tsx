@@ -10,8 +10,9 @@
 } from 'react';
 import { flushSync } from 'react-dom';
 import CodeMirror from '@uiw/react-codemirror';
-import { json } from '@codemirror/lang-json';
+import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { lintGutter, linter, type Diagnostic } from '@codemirror/lint';
 import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import {
@@ -136,7 +137,29 @@ const JSON_EDITOR_THEME = EditorView.theme(
   { dark: true },
 );
 
-const JSON_EXTENSIONS = [json(), syntaxHighlighting(JSON_HIGHLIGHT_STYLE)];
+const JSON_BASE_EXTENSIONS = [json(), syntaxHighlighting(JSON_HIGHLIGHT_STYLE)];
+const JSON_PARSE_LINTER = jsonParseLinter();
+
+function expandJsonDiagnosticToLine(view: EditorView, diagnostic: Diagnostic): Diagnostic {
+  const startLine = view.state.doc.lineAt(diagnostic.from);
+  const endLine = view.state.doc.lineAt(Math.min(Math.max(diagnostic.to, diagnostic.from), view.state.doc.length));
+
+  return {
+    ...diagnostic,
+    from: startLine.from,
+    to: endLine.to,
+  };
+}
+
+const JSON_INPUT_EXTENSIONS = [
+  ...JSON_BASE_EXTENSIONS,
+  lintGutter(),
+  linter((view) => JSON_PARSE_LINTER(view).map((diagnostic) => expandJsonDiagnosticToLine(view, diagnostic)), {
+    delay: 120,
+  }),
+];
+
+const JSON_OUTPUT_EXTENSIONS = JSON_BASE_EXTENSIONS;
 const SCHEMA_EDITOR_HEIGHT = 'clamp(320px, 45vh, 520px)';
 
 const DEFAULT_GENSCHEMA_BASE_URL = 'http://127.0.0.1:8000';
@@ -1092,7 +1115,7 @@ export function App() {
                   autoFocus
                   height={SCHEMA_EDITOR_HEIGHT}
                   theme={JSON_EDITOR_THEME}
-                  extensions={JSON_EXTENSIONS}
+                  extensions={JSON_INPUT_EXTENSIONS}
                   placeholder={`{\n  "name": "Alice",\n  "email": "alice@example.com"\n}`}
                   spellCheck={false}
                 />
@@ -1107,7 +1130,7 @@ export function App() {
                     value={dialog.generatedSchema || ''}
                     height={SCHEMA_EDITOR_HEIGHT}
                     theme={JSON_EDITOR_THEME}
-                    extensions={JSON_EXTENSIONS}
+                    extensions={JSON_OUTPUT_EXTENSIONS}
                     editable={false}
                     readOnly
                     basicSetup={false}
