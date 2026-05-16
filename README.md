@@ -92,7 +92,7 @@ Graph defaults:
 
 - shape-first comparator set: `FormatComparator`, `RequiredComparator`, `EmptyComparator`, `DeleteElement`
 - `EnumComparator` is disabled by default so low-cardinality strings do not dominate similarity
-- score uses a weighted blend of schema token overlap and `jsonschema-diff` statistics
+- score uses Dice similarity over structural schema tokens
 
 Example graph request:
 

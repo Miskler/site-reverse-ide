@@ -69,15 +69,6 @@ interface SimilarityGraphNodePayload {
   metadata: SimilarityGraphNodeMetadata;
 }
 
-interface SimilarityGraphEdgeStats {
-  ADDED: number;
-  DELETED: number;
-  REPLACED: number;
-  MODIFIED: number;
-  NO_DIFF: number;
-  UNKNOWN: number;
-}
-
 interface SimilarityGraphEdgePayload {
   id: string;
   source: string;
@@ -87,11 +78,7 @@ interface SimilarityGraphEdgePayload {
   percentage: number;
   label: string;
   structure_score: number;
-  diff_score: number;
-  stats: SimilarityGraphEdgeStats;
   metadata: {
-    structure_weight: number;
-    diff_weight: number;
     shared_tokens: number;
     left_tokens: number;
     right_tokens: number;
@@ -112,11 +99,6 @@ interface SimilarityGraphResponse {
     default_comparators: Array<{ name: string; attribute?: string }>;
     postprocessed: boolean;
     include_schema: boolean;
-    score_weights: {
-      structure: number;
-      diff: number;
-    };
-    score_formula: string;
   };
 }
 
@@ -136,9 +118,6 @@ interface SimilarityNodeData extends Record<string, unknown> {
 interface SimilarityEdgeData extends Record<string, unknown> {
   score: number;
   percentage: number;
-  structureScore: number;
-  diffScore: number;
-  stats: SimilarityGraphEdgeStats;
 }
 
 type SimilarityNodeType = Node<SimilarityNodeData, 'similarityNode'>;
@@ -149,7 +128,6 @@ const SOURCE_NODE_HEIGHT = 110;
 const MIN_GRAPH_THRESHOLD = 0.1;
 const MAX_GRAPH_THRESHOLD = 0.95;
 const DEFAULT_GRAPH_THRESHOLD = 0.55;
-const DEFAULT_STRUCTURE_WEIGHT = 0.7;
 const DEFAULT_LAYOUT_SCALE = 1;
 const DEFAULT_FOCUS_ZOOM = 1.08;
 
@@ -301,7 +279,6 @@ export function SimilarityGraphPage({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(DEFAULT_GRAPH_THRESHOLD);
-  const [structureWeight, setStructureWeight] = useState(DEFAULT_STRUCTURE_WEIGHT);
   const [refreshToken, setRefreshToken] = useState(0);
   const reactFlowRef = useRef<ReactFlowInstance<SimilarityNodeType, SimilarityEdgeType> | null>(null);
   const requestTokenRef = useRef(0);
@@ -318,10 +295,8 @@ export function SimilarityGraphPage({
       base_of: 'anyOf',
       pseudo_array: true,
       include_schema: false,
-      structure_weight: structureWeight,
-      diff_weight: 1 - structureWeight,
     }),
-    [sources, structureWeight],
+    [sources],
   );
 
   useEffect(() => {
@@ -454,9 +429,6 @@ export function SimilarityGraphPage({
       data: {
         score: edge.score,
         percentage: edge.percentage,
-        structureScore: edge.structure_score,
-        diffScore: edge.diff_score,
-        stats: edge.stats,
       },
       selectable: true,
     }));
@@ -590,28 +562,6 @@ export function SimilarityGraphPage({
             <span>больше связей</span>
           </div>
 
-          <div className="similarity-shell__controls-head similarity-shell__controls-head--spaced">
-            <span className="schema-viewer__label">Фокус сравнения</span>
-            <span className="badge">{Math.round(structureWeight * 100)}% структура</span>
-          </div>
-
-          <input
-            className="similarity-shell__range"
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={structureWeight}
-            onChange={(event) => {
-              setStructureWeight(Math.max(0, Math.min(1, Number(event.target.value))));
-            }}
-          />
-
-          <div className="similarity-shell__range-meta">
-            <span>jsonschema-diff</span>
-            <span>структура схемы</span>
-          </div>
-
           <div className="similarity-shell__controls-actions">
             <button type="button" className="primary" onClick={() => setRefreshToken((value) => value + 1)}>
               Пересчитать
@@ -718,33 +668,22 @@ export function SimilarityGraphPage({
                   <dd>{formatPercent(selectedEdge.structure_score)}</dd>
                 </div>
                 <div>
-                  <dt>Diff</dt>
-                  <dd>{formatPercent(selectedEdge.diff_score)}</dd>
-                </div>
-                <div>
                   <dt>Общие токены</dt>
                   <dd>{selectedEdge.metadata.shared_tokens}</dd>
+                </div>
+                <div>
+                  <dt>Токенов слева</dt>
+                  <dd>{selectedEdge.metadata.left_tokens}</dd>
+                </div>
+                <div>
+                  <dt>Токенов справа</dt>
+                  <dd>{selectedEdge.metadata.right_tokens}</dd>
                 </div>
                 <div>
                   <dt>Вес порога</dt>
                   <dd>{formatPercent(threshold)}</dd>
                 </div>
               </dl>
-            </div>
-
-            <div className="similarity-shell__inspector-card">
-              <div className="schema-viewer__section-head">
-                <span className="schema-viewer__label">Статистика сравнения</span>
-              </div>
-
-              <div className="similarity-shell__diff-grid">
-                {Object.entries(selectedEdge.stats).map(([key, value]) => (
-                  <div key={key} className="similarity-shell__diff-item">
-                    <span>{key}</span>
-                    <strong>{value}</strong>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         ) : selectedNode ? (

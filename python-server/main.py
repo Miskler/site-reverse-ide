@@ -10,8 +10,6 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
-from jsonschema_diff import ConfigMaker
-from jsonschema_diff.core import Property
 from genschema import Converter, PseudoArrayHandler
 from genschema.comparators import (
     DeleteElement,
@@ -33,8 +31,6 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024
 SIMILARITY_GRAPH_ENDPOINT = "/api/genschema/similarity-graph"
 SIMILARITY_GRAPH_ALIAS = "/api/genschema/graph"
-SIMILARITY_GRAPH_DEFAULT_STRUCTURE_WEIGHT = 0.7
-SIMILARITY_GRAPH_DEFAULT_DIFF_WEIGHT = 0.3
 SIMILARITY_GRAPH_DEFAULT_RADIUS = 240
 
 DEFAULT_COMPARATOR_SPECS: list[dict[str, Any]] = [
@@ -51,10 +47,6 @@ GRAPH_COMPARATOR_SPECS: list[dict[str, Any]] = [
     {"name": "empty"},
     {"name": "delete", "attribute": "isPseudoArray"},
 ]
-
-
-JSONSCHEMA_DIFF_CONFIG = ConfigMaker.make()
-
 
 class ApiError(Exception):
     pass
@@ -456,46 +448,6 @@ def dice_similarity(left: frozenset[str], right: frozenset[str]) -> float:
     return (2.0 * len(left & right)) / (len(left) + len(right))
 
 
-def compare_schema_pair(left_schema: dict[str, Any], right_schema: dict[str, Any]) -> tuple[float, dict[str, int]]:
-    comparison = Property(
-        config=JSONSCHEMA_DIFF_CONFIG,
-        schema_path=[],
-        json_path=[],
-        name=None,
-        old_schema=left_schema,
-        new_schema=right_schema,
-    )
-    comparison.compare()
-    stats = comparison.calc_diff()
-    total = sum(stats.values())
-    if total <= 0:
-        return 1.0, stats
-
-    diff_score = (stats["NO_DIFF"] + (0.5 * stats["UNKNOWN"])) / total
-    return max(0.0, min(1.0, diff_score)), stats
-
-
-def resolve_similarity_weights(payload: dict[str, Any]) -> tuple[float, float]:
-    structure_weight = max(
-        0.0,
-        normalize_float(
-            payload.get("structure_weight"),
-            SIMILARITY_GRAPH_DEFAULT_STRUCTURE_WEIGHT,
-        ),
-    )
-    diff_weight = max(
-        0.0,
-        normalize_float(
-            payload.get("diff_weight"),
-            SIMILARITY_GRAPH_DEFAULT_DIFF_WEIGHT,
-        ),
-    )
-    total = structure_weight + diff_weight
-    if total <= 0:
-        return SIMILARITY_GRAPH_DEFAULT_STRUCTURE_WEIGHT, SIMILARITY_GRAPH_DEFAULT_DIFF_WEIGHT
-    return structure_weight / total, diff_weight / total
-
-
 def build_circle_position(index: int, total: int) -> dict[str, float]:
     if total <= 1:
         return {"x": 0.0, "y": 0.0}
@@ -510,7 +462,6 @@ def build_circle_position(index: int, total: int) -> dict[str, float]:
 def build_similarity_graph(payload: dict[str, Any]) -> dict[str, Any]:
     input_items = parse_input_items(payload)
     include_schema = normalize_bool(payload.get("include_schema"), False)
-    structure_weight, diff_weight = resolve_similarity_weights(payload)
     use_default_comparators = normalize_bool(payload.get("use_default_comparators"), True)
     default_comparators = GRAPH_COMPARATOR_SPECS if use_default_comparators else []
 
@@ -551,7 +502,6 @@ def build_similarity_graph(payload: dict[str, Any]) -> dict[str, Any]:
                     "postprocessed": postprocess_enabled,
                 },
                 "schema": schema if include_schema else None,
-                "_schema": schema,
                 "_tokens": tokens,
             }
         )
@@ -559,17 +509,13 @@ def build_similarity_graph(payload: dict[str, Any]) -> dict[str, Any]:
     edges: list[dict[str, Any]] = []
     for left_index in range(len(node_records)):
         left = node_records[left_index]
-        left_schema = left["_schema"]
         left_tokens = left["_tokens"]
         for right_index in range(left_index + 1, len(node_records)):
             right = node_records[right_index]
-            right_schema = right["_schema"]
             right_tokens = right["_tokens"]
 
             structure_score = dice_similarity(left_tokens, right_tokens)
-            diff_score, stats = compare_schema_pair(left_schema, right_schema)
-            combined_score = (structure_weight * structure_score) + (diff_weight * diff_score)
-            combined_score = max(0.0, min(1.0, combined_score))
+            combined_score = structure_score
 
             edges.append(
                 {
@@ -581,11 +527,7 @@ def build_similarity_graph(payload: dict[str, Any]) -> dict[str, Any]:
                     "percentage": round(combined_score * 100.0, 2),
                     "label": f"{round(combined_score * 100.0, 1)}%",
                     "structure_score": round(structure_score, 6),
-                    "diff_score": round(diff_score, 6),
-                    "stats": stats,
                     "metadata": {
-                        "structure_weight": structure_weight,
-                        "diff_weight": diff_weight,
                         "shared_tokens": len(left_tokens & right_tokens),
                         "left_tokens": len(left_tokens),
                         "right_tokens": len(right_tokens),
@@ -614,11 +556,6 @@ def build_similarity_graph(payload: dict[str, Any]) -> dict[str, Any]:
             "default_comparators": default_comparators,
             "postprocessed": postprocess_enabled,
             "include_schema": include_schema,
-            "score_weights": {
-                "structure": structure_weight,
-                "diff": diff_weight,
-            },
-            "score_formula": "structure_weight * schema_token_dice + diff_weight * jsonschema_diff_score",
         },
     }
 
@@ -679,10 +616,6 @@ class GenschemaHandler(BaseHTTPRequestHandler):
                         "route": SIMILARITY_GRAPH_ENDPOINT,
                         "aliases": [SIMILARITY_GRAPH_ALIAS],
                         "default_comparators": GRAPH_COMPARATOR_SPECS,
-                        "score_weights": {
-                            "structure": SIMILARITY_GRAPH_DEFAULT_STRUCTURE_WEIGHT,
-                            "diff": SIMILARITY_GRAPH_DEFAULT_DIFF_WEIGHT,
-                        },
                     },
                     "endpoints": [
                         "/api/health",
