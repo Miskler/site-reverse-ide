@@ -3,8 +3,10 @@ import { ToastContainer } from 'react-toastify';
 import { App as GraphEditorApp } from './App';
 import { SchemaNavigationPanel } from './schema-viewer/SchemaNavigationPanel';
 import { SchemaViewerPage } from './schema-viewer/SchemaViewerPage';
+import { SimilarityGraphPage } from './similarity-graph/SimilarityGraphPage';
 import {
   pushSchemaNodeRoute,
+  pushSimilarityRoute,
   resolveAppRoute,
   type AppRoute,
 } from './lib/app-router';
@@ -62,6 +64,11 @@ export function RootApp() {
     setRoute(resolveAppRoute(window.location.pathname, window.history.state));
   }, []);
 
+  const goToSimilarity = useCallback(() => {
+    pushSimilarityRoute();
+    setRoute(resolveAppRoute(window.location.pathname, window.history.state));
+  }, []);
+
   const backToGraph = useCallback(() => {
     setRoute({ kind: 'graph' });
     window.history.pushState(null, '', '/');
@@ -110,6 +117,7 @@ export function RootApp() {
           currentNodeUid={route.kind === 'schema' ? route.nodeUid : ''}
           routeKind={route.kind}
           onGoToGraph={backToGraph}
+          onGoToSimilarity={goToSimilarity}
           onOpenSchemaNode={navigateSchemaNode}
         />
 
@@ -118,6 +126,14 @@ export function RootApp() {
             <SchemaViewerPage
               nodeUid={route.nodeUid}
               jsonIndex={route.jsonIndex}
+              onNavigateSchemaNode={navigateSchemaNode}
+            />
+          ) : route.kind === 'similarity' ? (
+            <SimilarityGraphPage
+              graph={graphDocument}
+              busy={graphBusy}
+              loadError={graphLoadError}
+              onGoToGraph={backToGraph}
               onNavigateSchemaNode={navigateSchemaNode}
             />
           ) : (

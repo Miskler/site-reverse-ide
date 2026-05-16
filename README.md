@@ -59,6 +59,8 @@ Endpoints:
 - `GET /api/genschema`
 - `POST /api/genschema`
 - `POST /api/genschema/postprocess`
+- `POST /api/genschema/similarity-graph`
+- `POST /api/genschema/graph`
 
 Example request:
 
@@ -80,5 +82,35 @@ The server accepts:
 
 - `inputs`, `documents`, or `items` as the input array
 - `kind: "json"` or `kind: "schema"` wrappers for explicit input types
+- optional `label`, `title`, or `name` on wrapper items for graph node labels
 - optional comparator configuration for `FormatComparator`, `EnumComparator`, `RequiredComparator`, `EmptyComparator`, `DeleteElement`, `NoAdditionalProperties`, `PreserveCommonKeywordsComparator`, and `SchemaVersionComparator`
 - optional reference postprocessing via `SchemaReferencePostprocessor`
+
+The similarity graph endpoint returns a complete weighted graph where each node is one input and each edge is one pairwise schema match.
+
+Graph defaults:
+
+- shape-first comparator set: `FormatComparator`, `RequiredComparator`, `EmptyComparator`, `DeleteElement`
+- `EnumComparator` is disabled by default so low-cardinality strings do not dominate similarity
+- score uses a weighted blend of schema token overlap and `jsonschema-diff` statistics
+
+Example graph request:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/genschema/similarity-graph \
+  -H "Content-Type: application/json" \
+  -d '{
+    "documents": [
+      {
+        "kind": "json",
+        "label": "alpha",
+        "value": { "name": "Alice", "email": "alice@example.com" }
+      },
+      {
+        "kind": "json",
+        "label": "beta",
+        "value": { "name": "Bob", "email": "bob@example.com", "age": 30 }
+      }
+    ]
+  }'
+```

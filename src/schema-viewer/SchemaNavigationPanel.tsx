@@ -6,8 +6,9 @@ interface SchemaNavigationPanelProps {
   busy: boolean;
   loadError: string | null;
   currentNodeUid: string;
-  routeKind: 'graph' | 'schema';
+  routeKind: 'graph' | 'schema' | 'similarity';
   onGoToGraph: () => void;
+  onGoToSimilarity: () => void;
   onOpenSchemaNode: (nodeUid: string, jsonIndex?: number | null) => void;
 }
 
@@ -18,6 +19,7 @@ export function SchemaNavigationPanel({
   currentNodeUid,
   routeKind,
   onGoToGraph,
+  onGoToSimilarity,
   onOpenSchemaNode,
 }: SchemaNavigationPanelProps) {
   const nodes = graph?.nodes ?? [];
@@ -58,6 +60,15 @@ export function SchemaNavigationPanel({
         >
           <span className="schema-viewer__nav-switch-title">Ноды</span>
           <span className="schema-viewer__nav-switch-caption">Основной canvas</span>
+        </button>
+        <button
+          type="button"
+          className={`schema-viewer__nav-switch${routeKind === 'similarity' ? ' is-active' : ''}`}
+          aria-pressed={routeKind === 'similarity'}
+          onClick={onGoToSimilarity}
+        >
+          <span className="schema-viewer__nav-switch-title">Связи</span>
+          <span className="schema-viewer__nav-switch-caption">Крепость JSON</span>
         </button>
         <button
           type="button"

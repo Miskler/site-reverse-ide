@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.metadata import PackageNotFoundError, version as package_version
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
+from jsonschema_diff import ConfigMaker
+from jsonschema_diff.core import Property
 from genschema import Converter, PseudoArrayHandler
 from genschema.comparators import (
     DeleteElement,
@@ -27,6 +31,11 @@ SUPPORTED_BASE_OF = ("anyOf", "oneOf", "allOf")
 DEFAULT_PORT = 8000
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024
+SIMILARITY_GRAPH_ENDPOINT = "/api/genschema/similarity-graph"
+SIMILARITY_GRAPH_ALIAS = "/api/genschema/graph"
+SIMILARITY_GRAPH_DEFAULT_STRUCTURE_WEIGHT = 0.7
+SIMILARITY_GRAPH_DEFAULT_DIFF_WEIGHT = 0.3
+SIMILARITY_GRAPH_DEFAULT_RADIUS = 240
 
 DEFAULT_COMPARATOR_SPECS: list[dict[str, Any]] = [
     {"name": "format"},
@@ -36,9 +45,28 @@ DEFAULT_COMPARATOR_SPECS: list[dict[str, Any]] = [
     {"name": "delete", "attribute": "isPseudoArray"},
 ]
 
+GRAPH_COMPARATOR_SPECS: list[dict[str, Any]] = [
+    {"name": "format"},
+    {"name": "required"},
+    {"name": "empty"},
+    {"name": "delete", "attribute": "isPseudoArray"},
+]
+
+
+JSONSCHEMA_DIFF_CONFIG = ConfigMaker.make()
+
 
 class ApiError(Exception):
     pass
+
+
+@dataclass(slots=True)
+class ParsedInputItem:
+    kind: str
+    value: Any
+    label: str
+    source: str | None = None
+    path: str | None = None
 
 
 def is_record(value: Any) -> bool:
@@ -71,6 +99,53 @@ def normalize_float(value: Any, fallback: float) -> float:
         if numeric == numeric and numeric not in (float("inf"), float("-inf")):
             return numeric
     return fallback
+
+
+def infer_input_label(item: Any, kind: str, index: int, path: str | None = None) -> str:
+    if is_record(item):
+        for key in ("label", "title", "name", "id"):
+            candidate = normalize_text(item.get(key), "")
+            if candidate:
+                return candidate
+
+    if path:
+        basename = os.path.basename(path)
+        if basename:
+            return basename
+
+    if kind.startswith("file:"):
+        return f"file {index + 1}"
+
+    return f"document {index + 1}"
+
+
+def summarize_input_value(kind: str, value: Any) -> str:
+    if kind.startswith("file:"):
+        if isinstance(value, str):
+            basename = os.path.basename(value)
+            return f"File input {basename or value}"
+        return "File input"
+
+    if kind == "schema":
+        if is_record(value):
+            return f"Schema object with {len(value)} top-level keys"
+        if isinstance(value, list):
+            return f"Schema array with {len(value)} items"
+        return "Schema source"
+
+    if isinstance(value, dict):
+        keys = list(value.keys())
+        if not keys:
+            return "Empty object"
+        preview = ", ".join(str(key) for key in keys[:5])
+        if len(keys) > 5:
+            preview = f"{preview}, +{len(keys) - 5} more"
+        return f"Object with {len(keys)} top-level keys: {preview}"
+
+    if isinstance(value, list):
+        return f"Array with {len(value)} items"
+
+    return f"{type(value).__name__.capitalize()} value"
 
 
 def unfold_stringified_json(value: Any) -> Any:
@@ -107,7 +182,7 @@ def ensure_allowed_keys(value: dict[str, Any], allowed: set[str], field_name: st
         raise ApiError(f"Unexpected fields in {field_name}: {extras}")
 
 
-def parse_inputs(payload: dict[str, Any]) -> list[tuple[str, Any]]:
+def parse_input_items(payload: dict[str, Any]) -> list[ParsedInputItem]:
     raw_inputs = payload.get("inputs")
     if raw_inputs is None:
         raw_inputs = payload.get("documents")
@@ -119,7 +194,7 @@ def parse_inputs(payload: dict[str, Any]) -> list[tuple[str, Any]]:
     if not isinstance(raw_inputs, list):
         raise ApiError("inputs must be an array")
 
-    parsed: list[tuple[str, Any]] = []
+    parsed: list[ParsedInputItem] = []
     for index, item in enumerate(raw_inputs):
         if is_record(item) and "kind" in item:
             kind = normalize_text(item.get("kind"), "").lower()
@@ -133,17 +208,41 @@ def parse_inputs(payload: dict[str, Any]) -> list[tuple[str, Any]]:
                     raise ApiError(f"Unsupported file source at index {index}: {source}")
                 if not path:
                     raise ApiError(f"Missing path for file input at index {index}")
-                parsed.append((f"file:{source}", path))
+                parsed.append(
+                    ParsedInputItem(
+                        kind=f"file:{source}",
+                        value=path,
+                        label=infer_input_label(item, kind, index, path),
+                        source=source,
+                        path=path,
+                    )
+                )
                 continue
 
             if "value" not in item:
                 raise ApiError(f"Missing value for input at index {index}")
-            parsed.append((kind, item["value"]))
+            parsed.append(
+                ParsedInputItem(
+                    kind=kind,
+                    value=item["value"],
+                    label=infer_input_label(item, kind, index),
+                )
+            )
             continue
 
-        parsed.append(("json", item))
+        parsed.append(
+            ParsedInputItem(
+                kind="json",
+                value=item,
+                label=infer_input_label(item, "json", index),
+            )
+        )
 
     return parsed
+
+
+def parse_inputs(payload: dict[str, Any]) -> list[tuple[str, Any]]:
+    return [(item.kind, item.value) for item in parse_input_items(payload)]
 
 
 def build_comparator(spec: Any):
@@ -193,12 +292,17 @@ def build_comparator(spec: Any):
     raise ApiError(f"Unsupported comparator: {name}")
 
 
-def register_comparators(converter: Converter, payload: dict[str, Any]) -> list[str]:
+def register_comparators(
+    converter: Converter,
+    payload: dict[str, Any],
+    default_specs: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    default_specs = [] if default_specs is None else default_specs
     use_default_comparators = normalize_bool(payload.get("use_default_comparators"), True)
     raw_comparators = payload.get("comparators")
 
     if raw_comparators is None:
-        raw_comparators = DEFAULT_COMPARATOR_SPECS if use_default_comparators else []
+        raw_comparators = default_specs if use_default_comparators else []
     elif not isinstance(raw_comparators, list):
         raise ApiError("comparators must be an array")
 
@@ -245,7 +349,12 @@ def add_input(converter: Converter, kind: str, value: Any, index: int) -> None:
     raise ApiError(f"Unsupported input kind: {kind}")
 
 
-def build_converter(payload: dict[str, Any]) -> tuple[Converter, list[str], list[tuple[str, Any]]]:
+def build_converter(
+    payload: dict[str, Any],
+    *,
+    inputs_override: list[tuple[str, Any]] | None = None,
+    default_comparator_specs: list[dict[str, Any]] | None = None,
+) -> tuple[Converter, list[str], list[tuple[str, Any]]]:
     base_of = normalize_text(payload.get("base_of"), "anyOf")
     if base_of not in SUPPORTED_BASE_OF:
         raise ApiError(f"base_of must be one of: {', '.join(SUPPORTED_BASE_OF)}")
@@ -256,8 +365,17 @@ def build_converter(payload: dict[str, Any]) -> tuple[Converter, list[str], list
         base_of=base_of,  # type: ignore[arg-type]
     )
 
-    inputs = parse_inputs(payload)
-    applied_comparators = register_comparators(converter, payload)
+    applied_comparators = register_comparators(
+        converter,
+        payload,
+        default_specs=DEFAULT_COMPARATOR_SPECS if default_comparator_specs is None else default_comparator_specs,
+    )
+
+    if inputs_override is None:
+        inputs = parse_inputs(payload)
+    else:
+        inputs = inputs_override
+
     for index, (kind, value) in enumerate(inputs):
         add_input(converter, kind, value, index)
 
@@ -322,6 +440,189 @@ def read_graph_payload(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     return payload
 
 
+def collect_structural_tokens(schema: dict[str, Any]) -> frozenset[str]:
+    return frozenset(SchemaReferencePostprocessor._collect_structural_tokens(schema))
+
+
+def count_structural_keys(tokens: frozenset[str]) -> int:
+    return SchemaReferencePostprocessor._count_total_keys(tokens)
+
+
+def dice_similarity(left: frozenset[str], right: frozenset[str]) -> float:
+    if not left and not right:
+        return 1.0
+    if not left or not right:
+        return 0.0
+    return (2.0 * len(left & right)) / (len(left) + len(right))
+
+
+def compare_schema_pair(left_schema: dict[str, Any], right_schema: dict[str, Any]) -> tuple[float, dict[str, int]]:
+    comparison = Property(
+        config=JSONSCHEMA_DIFF_CONFIG,
+        schema_path=[],
+        json_path=[],
+        name=None,
+        old_schema=left_schema,
+        new_schema=right_schema,
+    )
+    comparison.compare()
+    stats = comparison.calc_diff()
+    total = sum(stats.values())
+    if total <= 0:
+        return 1.0, stats
+
+    diff_score = (stats["NO_DIFF"] + (0.5 * stats["UNKNOWN"])) / total
+    return max(0.0, min(1.0, diff_score)), stats
+
+
+def resolve_similarity_weights(payload: dict[str, Any]) -> tuple[float, float]:
+    structure_weight = max(
+        0.0,
+        normalize_float(
+            payload.get("structure_weight"),
+            SIMILARITY_GRAPH_DEFAULT_STRUCTURE_WEIGHT,
+        ),
+    )
+    diff_weight = max(
+        0.0,
+        normalize_float(
+            payload.get("diff_weight"),
+            SIMILARITY_GRAPH_DEFAULT_DIFF_WEIGHT,
+        ),
+    )
+    total = structure_weight + diff_weight
+    if total <= 0:
+        return SIMILARITY_GRAPH_DEFAULT_STRUCTURE_WEIGHT, SIMILARITY_GRAPH_DEFAULT_DIFF_WEIGHT
+    return structure_weight / total, diff_weight / total
+
+
+def build_circle_position(index: int, total: int) -> dict[str, float]:
+    if total <= 1:
+        return {"x": 0.0, "y": 0.0}
+
+    angle = (2.0 * math.pi * index / total) - (math.pi / 2.0)
+    return {
+        "x": round(math.cos(angle) * SIMILARITY_GRAPH_DEFAULT_RADIUS, 3),
+        "y": round(math.sin(angle) * SIMILARITY_GRAPH_DEFAULT_RADIUS, 3),
+    }
+
+
+def build_similarity_graph(payload: dict[str, Any]) -> dict[str, Any]:
+    input_items = parse_input_items(payload)
+    include_schema = normalize_bool(payload.get("include_schema"), False)
+    structure_weight, diff_weight = resolve_similarity_weights(payload)
+    use_default_comparators = normalize_bool(payload.get("use_default_comparators"), True)
+    default_comparators = GRAPH_COMPARATOR_SPECS if use_default_comparators else []
+
+    postprocess_spec = payload.get("postprocess")
+    postprocess_enabled = is_record(postprocess_spec) and normalize_bool(postprocess_spec.get("enabled"), True)
+    postprocess_config = build_postprocess_config(postprocess_spec) if postprocess_enabled else None
+
+    node_records: list[dict[str, Any]] = []
+    applied_comparators: list[str] = []
+    for index, item in enumerate(input_items):
+        displayed_value = unfold_stringified_json(item.value) if item.kind == "json" else item.value
+        converter, current_comparators, _ = build_converter(
+            payload,
+            inputs_override=[(item.kind, item.value)],
+            default_comparator_specs=default_comparators,
+        )
+        if not applied_comparators:
+            applied_comparators = current_comparators
+        schema = converter.run()
+        if postprocess_config is not None:
+            schema = SchemaReferencePostprocessor.process(schema, postprocess_config)
+
+        tokens = collect_structural_tokens(schema)
+        total_keys = count_structural_keys(tokens)
+        node_records.append(
+            {
+                "id": f"input-{index + 1}",
+                "label": item.label,
+                "description": summarize_input_value(item.kind, displayed_value),
+                "position": build_circle_position(index, len(input_items)),
+                "metadata": {
+                    "index": index,
+                    "kind": item.kind,
+                    "source": item.source,
+                    "path": item.path,
+                    "structural_tokens": len(tokens),
+                    "total_keys": total_keys,
+                    "postprocessed": postprocess_enabled,
+                },
+                "schema": schema if include_schema else None,
+                "_schema": schema,
+                "_tokens": tokens,
+            }
+        )
+
+    edges: list[dict[str, Any]] = []
+    for left_index in range(len(node_records)):
+        left = node_records[left_index]
+        left_schema = left["_schema"]
+        left_tokens = left["_tokens"]
+        for right_index in range(left_index + 1, len(node_records)):
+            right = node_records[right_index]
+            right_schema = right["_schema"]
+            right_tokens = right["_tokens"]
+
+            structure_score = dice_similarity(left_tokens, right_tokens)
+            diff_score, stats = compare_schema_pair(left_schema, right_schema)
+            combined_score = (structure_weight * structure_score) + (diff_weight * diff_score)
+            combined_score = max(0.0, min(1.0, combined_score))
+
+            edges.append(
+                {
+                    "id": f"{left['id']}--{right['id']}",
+                    "source": left["id"],
+                    "target": right["id"],
+                    "kind": "similarity",
+                    "score": round(combined_score, 6),
+                    "percentage": round(combined_score * 100.0, 2),
+                    "label": f"{round(combined_score * 100.0, 1)}%",
+                    "structure_score": round(structure_score, 6),
+                    "diff_score": round(diff_score, 6),
+                    "stats": stats,
+                    "metadata": {
+                        "structure_weight": structure_weight,
+                        "diff_weight": diff_weight,
+                        "shared_tokens": len(left_tokens & right_tokens),
+                        "left_tokens": len(left_tokens),
+                        "right_tokens": len(right_tokens),
+                    },
+                }
+            )
+
+    nodes: list[dict[str, Any]] = []
+    for record in node_records:
+        node = {key: value for key, value in record.items() if not key.startswith("_")}
+        if node.get("schema") is None:
+            node.pop("schema", None)
+        nodes.append(node)
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "meta": {
+            "inputs": len(input_items),
+            "pairs": len(edges),
+            "complete_graph": True,
+            "base_of": normalize_text(payload.get("base_of"), "anyOf"),
+            "pseudo_array": normalize_bool(payload.get("pseudo_array"), True),
+            "use_default_comparators": use_default_comparators,
+            "comparators": applied_comparators,
+            "default_comparators": default_comparators,
+            "postprocessed": postprocess_enabled,
+            "include_schema": include_schema,
+            "score_weights": {
+                "structure": structure_weight,
+                "diff": diff_weight,
+            },
+            "score_formula": "structure_weight * schema_token_dice + diff_weight * jsonschema_diff_score",
+        },
+    }
+
+
 class GenschemaHandler(BaseHTTPRequestHandler):
     server_version = "GenschemaRest/1.0"
 
@@ -374,10 +675,21 @@ class GenschemaHandler(BaseHTTPRequestHandler):
                     "library_version": read_package_version(),
                     "supported_base_of": list(SUPPORTED_BASE_OF),
                     "default_comparators": DEFAULT_COMPARATOR_SPECS,
+                    "graph_defaults": {
+                        "route": SIMILARITY_GRAPH_ENDPOINT,
+                        "aliases": [SIMILARITY_GRAPH_ALIAS],
+                        "default_comparators": GRAPH_COMPARATOR_SPECS,
+                        "score_weights": {
+                            "structure": SIMILARITY_GRAPH_DEFAULT_STRUCTURE_WEIGHT,
+                            "diff": SIMILARITY_GRAPH_DEFAULT_DIFF_WEIGHT,
+                        },
+                    },
                     "endpoints": [
                         "/api/health",
                         "/api/genschema",
                         "/api/genschema/postprocess",
+                        SIMILARITY_GRAPH_ENDPOINT,
+                        SIMILARITY_GRAPH_ALIAS,
                     ],
                 },
             )
@@ -418,6 +730,11 @@ class GenschemaHandler(BaseHTTPRequestHandler):
                         },
                     },
                 )
+                return
+
+            if route in {SIMILARITY_GRAPH_ENDPOINT, SIMILARITY_GRAPH_ALIAS}:
+                graph = build_similarity_graph(payload)
+                self._send_json(HTTPStatus.OK, graph)
                 return
 
             if route == "/api/genschema/postprocess":

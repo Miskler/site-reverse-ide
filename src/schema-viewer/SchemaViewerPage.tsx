@@ -15,6 +15,7 @@ import { buildSchemaGraph, getSelectionDetails } from './schema-graph';
 import { validateSchemaDocument } from './schema-validation';
 import { appToast } from '../lib/app-toast';
 import { readIntegerCookie, writeCookie } from '../lib/cookies';
+import { buildGenschemaUrl } from '../lib/genschema';
 import { loadGraphDocument } from '../lib/graph-store';
 import {
   createNodeRawJson,
@@ -75,11 +76,6 @@ const DETAILS_PANEL_MIN_CANVAS_WIDTH = 420;
 const DETAILS_PANEL_RESIZER_WIDTH = 8;
 const DETAILS_PANEL_KEY_STEP = 24;
 const DETAILS_PANEL_KEY_STEP_FAST = 72;
-
-function buildGenschemaUrl(pathname: string): string {
-  const baseUrl = import.meta.env.VITE_GENSCHEMA_URL?.trim() || 'http://127.0.0.1:8000';
-  return new URL(pathname, baseUrl).toString();
-}
 
 export function SchemaViewerPage({
   nodeUid,
