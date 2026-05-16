@@ -43,7 +43,7 @@ interface SimilaritySource {
   variantLabel: string;
   label: string;
   rawJson: string;
-  summary: string;
+  note: string;
   byteSize: number;
   totalVariants: number;
 }
@@ -123,13 +123,14 @@ interface SimilarityGraphResponse {
 interface SimilarityNodeData extends Record<string, unknown> {
   label: string;
   description: string;
-  summary: string;
+  note: string;
   nodeTitle: string;
   nodeUid: string;
   variantLabel: string;
   metadata: SimilarityGraphNodeMetadata;
   strength: number;
   neighborCount: number;
+  accentColor: string;
 }
 
 interface SimilarityEdgeData extends Record<string, unknown> {
@@ -180,10 +181,10 @@ function formatByteSize(rawJson: string): string {
   return `${Math.max(1, Math.round(kilobytes / 1024))} MB`;
 }
 
-function summarizeRawJson(rawJson: string): string {
-  const compact = rawJson.trim().replace(/\s+/g, ' ');
+function summarizeNodeNote(note: string): string {
+  const compact = normalizeText(note, '').replace(/\s+/g, ' ');
   if (!compact) {
-    return 'Пустой JSON';
+    return 'Без описания';
   }
 
   return compact.length > 96 ? `${compact.slice(0, 96)}…` : compact;
@@ -238,7 +239,7 @@ function buildSimilaritySources(graph: GraphDocument | null): SimilaritySource[]
         variantLabel: formatVariantLabel(variantIndex),
         label: rawJsons.length > 1 ? `${baseTitle} · ${formatVariantLabel(variantIndex)}` : baseTitle,
         rawJson,
-        summary: summarizeRawJson(rawJson),
+        note: summarizeNodeNote(node.note),
         byteSize: typeof TextEncoder !== 'undefined'
           ? new TextEncoder().encode(rawJson).length
           : rawJson.length,
@@ -426,13 +427,14 @@ export function SimilarityGraphPage({
         data: {
           label: node.label,
           description: node.description,
-          summary: source?.summary ?? node.description,
+          note: source?.note ?? normalizeText(node.description, 'Без описания'),
           nodeTitle: source?.nodeTitle ?? node.label,
           nodeUid: source?.nodeUid ?? node.id,
           variantLabel: source?.variantLabel ?? 'основной',
           metadata: node.metadata,
           strength,
           neighborCount,
+          accentColor: source?.nodeColor ?? '#2f8f83',
         },
         draggable: false,
         selectable: true,
@@ -699,10 +701,10 @@ export function SimilarityGraphPage({
                       type="button"
                       className="similarity-shell__source-main"
                       onClick={() => focusFlowNode(responseNodeId)}
-                      title={source.summary}
+                      title={source.note}
                     >
                       <span className="similarity-shell__source-title">{source.label}</span>
-                      <span className="similarity-shell__source-summary">{source.summary}</span>
+                      <span className="similarity-shell__source-summary">{source.note}</span>
                     </button>
 
                     <div className="similarity-shell__source-meta">
@@ -858,7 +860,7 @@ export function SimilarityGraphPage({
                 <div>
                   <div className="schema-viewer__eyebrow">Selected</div>
                   <h3 className="similarity-shell__source-heading">{selectedSource?.label ?? selectedNode.data.label}</h3>
-                  <p className="schema-viewer__hint">{selectedSource?.summary ?? selectedNode.data.summary}</p>
+                  <p className="schema-viewer__hint">{selectedSource?.note ?? selectedNode.data.note}</p>
                 </div>
                 <span className="badge">{formatPercent(selectedNode.data.strength)}</span>
               </div>
@@ -960,7 +962,8 @@ function SimilarityNode({ data, selected }: NodeProps<SimilarityNodeType>) {
   return (
     <article
       className={`similarity-node similarity-node--${tone}${selected ? ' is-selected' : ''}`}
-      title={data.summary}
+      style={{ '--node-color': data.accentColor } as CSSProperties}
+      title={data.note}
     >
       <Handle type="target" position={Position.Left} className="similarity-node__handle" />
 
@@ -972,7 +975,7 @@ function SimilarityNode({ data, selected }: NodeProps<SimilarityNodeType>) {
         <span className="similarity-node__badge">{formatPercent(data.strength)}</span>
       </div>
 
-      <p className="similarity-node__summary">{data.summary}</p>
+      <p className="similarity-node__summary">{data.note}</p>
 
       <div className="similarity-node__facts">
         <span>{data.metadata.total_keys} keys</span>
