@@ -126,7 +126,6 @@ export function RootApp() {
             <SchemaViewerPage
               nodeUid={route.nodeUid}
               jsonIndex={route.jsonIndex}
-              onNavigateSchemaNode={navigateSchemaNode}
             />
           ) : route.kind === 'similarity' ? (
           <SimilarityGraphPage

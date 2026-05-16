@@ -12,9 +12,6 @@ import { formatJsonPointerForCode } from './pointer-format';
 interface DetailPanelProps {
   details: SelectionDetails | null;
   localJson: string | null;
-  sourceOptions: Array<{ label: string; value: number | null }>;
-  selectedSourceValue: number | null;
-  onSelectSource: (value: number | null) => void;
   onClose: () => void;
 }
 
@@ -125,9 +122,6 @@ function parseJsonPointer(pointer: string): string[] {
 export function DetailPanel({
   details,
   localJson,
-  sourceOptions,
-  selectedSourceValue,
-  onSelectSource,
   onClose,
 }: DetailPanelProps) {
   const currentDetails = details;
@@ -172,28 +166,6 @@ export function DetailPanel({
     >
       {selectionDetails.description ? (
         <p className="schema-viewer__description">{selectionDetails.description}</p>
-      ) : null}
-
-      {sourceOptions.length > 1 ? (
-        <div className="schema-viewer__section">
-          <div className="schema-viewer__section-head">
-            <span className="schema-viewer__label">JSON source</span>
-          </div>
-          <select
-            className="schema-viewer__source-select"
-            value={String(selectedSourceValue ?? '')}
-            onChange={(event) => {
-              const rawValue = event.target.value;
-              onSelectSource(rawValue === '' ? null : Number(rawValue));
-            }}
-          >
-            {sourceOptions.map((option) => (
-              <option key={option.value ?? 'all'} value={option.value === null ? '' : String(option.value)}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
       ) : null}
 
       <div className="schema-viewer__section">

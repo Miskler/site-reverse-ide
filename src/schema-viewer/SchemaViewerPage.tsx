@@ -31,7 +31,6 @@ interface FocusNodeRequest {
 interface SchemaViewerPageProps {
   nodeUid: string;
   jsonIndex: number | null;
-  onNavigateSchemaNode: (nodeUid: string, jsonIndex?: number | null) => void;
 }
 
 const api = {
@@ -80,7 +79,6 @@ const DETAILS_PANEL_KEY_STEP_FAST = 72;
 export function SchemaViewerPage({
   nodeUid,
   jsonIndex,
-  onNavigateSchemaNode,
 }: SchemaViewerPageProps) {
   const [detailsWidth, setDetailsWidth] = useState<number>(() =>
     getInitialDetailsWidth(),
@@ -116,13 +114,6 @@ export function SchemaViewerPage({
     () => (graphModel ? getSelectionDetails(graphModel, selection) : null),
     [graphModel, selection],
   );
-
-  const currentNode = useMemo(
-    () => (graphDocument ? findGraphNode(graphDocument, nodeUid) : null),
-    [graphDocument, nodeUid],
-  );
-
-  const sourceOptions = useMemo(() => buildSourceOptions(currentNode), [currentNode]);
 
   const shellStyle = useMemo<CSSProperties>(
     () =>
@@ -537,9 +528,6 @@ export function SchemaViewerPage({
       <DetailPanel
         details={details}
         localJson={localJson}
-        sourceOptions={sourceOptions}
-        selectedSourceValue={jsonIndex}
-        onSelectSource={(value) => onNavigateSchemaNode(nodeUid, value)}
         onClose={() => setSelection(null)}
       />
     </div>
@@ -601,25 +589,6 @@ function resolveNodeLocalJson(
   }
 
   return sources[jsonIndex] ?? sources[0] ?? null;
-}
-
-function buildSourceOptions(node: GraphDocument['nodes'][number] | null): Array<{
-  label: string;
-  value: number | null;
-}> {
-  if (!node) {
-    return [];
-  }
-
-  const sourceCount = Math.max(1, node.rawJsons.length);
-
-  return [
-    { label: 'Overview', value: null },
-    ...Array.from({ length: sourceCount }, (_, index) => ({
-      label: `JSON ${index + 1}`,
-      value: index,
-    })),
-  ];
 }
 
 function getInitialDetailsWidth(): number {
