@@ -1905,18 +1905,20 @@ button.is-active {
 }
 
 .schema-viewer__nav-node {
+  --nav-node-color: var(--accent);
   display: grid;
   gap: 0.55rem;
   width: 100%;
   padding: 0.85rem 0.9rem;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.035);
+  border-color: color-mix(in srgb, var(--nav-node-color) 32%, rgba(255, 255, 255, 0.08));
+  background: color-mix(in srgb, var(--nav-node-color) 5%, rgba(255, 255, 255, 0.035));
 }
 
 .schema-viewer__nav-node.is-active {
-  border-color: rgba(47, 143, 131, 0.24);
-  background: rgba(47, 143, 131, 0.08);
+  border-color: color-mix(in srgb, var(--nav-node-color) 56%, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--nav-node-color) 10%, rgba(255, 255, 255, 0.05));
 }
 
 .schema-viewer__nav-node-main,

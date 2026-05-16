@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { GraphDocument } from '../shared/graph';
 
 interface SchemaNavigationPanelProps {
@@ -107,6 +107,7 @@ export function SchemaNavigationPanel({
                     <section
                       key={node.uid}
                       className={`schema-viewer__nav-node${isActive ? ' is-active' : ''}`}
+                      style={{ '--nav-node-color': node.color } as CSSProperties}
                     >
                       <button
                         type="button"

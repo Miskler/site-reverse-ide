@@ -36,7 +36,7 @@ export function RootApp() {
   const [graphBusy, setGraphBusy] = useState(true);
   const [graphLoadError, setGraphLoadError] = useState<string | null>(null);
   const rootShellStyle: CSSProperties = {
-    '--root-nav-width': '320px',
+    '--root-nav-width': 'calc(320px / 1.5)',
   } as CSSProperties;
 
   useEffect(() => {
