@@ -128,6 +128,24 @@ interface SimilarityEdgeData extends Record<string, unknown> {
 
 type SimilarityNodeType = Node<SimilarityNodeData, 'similarityNode'>;
 type SimilarityEdgeType = Edge<SimilarityEdgeData, 'similarityEdge'>;
+type SimilarityNodeHandleSide = 'left' | 'right' | 'top' | 'bottom';
+type SimilarityNodeHandleRole = 'source' | 'target';
+type SimilarityNodeHandleId = `${SimilarityNodeHandleSide}-${SimilarityNodeHandleRole}`;
+
+interface SimilarityFlowNodeIndexEntry {
+  node: SimilarityNodeType;
+  center: LayoutPoint;
+}
+
+interface SimilarityHandleChoice {
+  handleId: SimilarityNodeHandleId;
+  position: Position;
+}
+
+interface SimilarityHandlePairChoice {
+  source: SimilarityHandleChoice;
+  target: SimilarityHandleChoice;
+}
 
 const MIN_GRAPH_THRESHOLD = 0.1;
 const MAX_GRAPH_THRESHOLD = 0.95;
@@ -138,6 +156,53 @@ const SOURCE_NODE_WIDTH = 220;
 const SOURCE_NODE_HEIGHT = 110;
 const MIN_NODE_SCALE = 0.88;
 const MAX_NODE_SCALE = 1.55;
+const SIMILARITY_EDGE_CURVATURE = 0.28;
+const SIMILARITY_AXIS_PREFERENCE_POWER = 0.68;
+const SIMILARITY_AXIS_PREFERENCE_SPAN = 2.35;
+const SIMILARITY_AXIS_PENALTY_WEIGHT = 2.7;
+const SIMILARITY_HANDLE_IDS: Record<
+  SimilarityNodeHandleSide,
+  Record<SimilarityNodeHandleRole, SimilarityNodeHandleId>
+> = {
+  left: {
+    source: 'left-source',
+    target: 'left-target',
+  },
+  right: {
+    source: 'right-source',
+    target: 'right-target',
+  },
+  top: {
+    source: 'top-source',
+    target: 'top-target',
+  },
+  bottom: {
+    source: 'bottom-source',
+    target: 'bottom-target',
+  },
+};
+
+const SIMILARITY_NODE_HANDLE_LAYOUT: Array<{
+  id: SimilarityNodeHandleId;
+  type: SimilarityNodeHandleRole;
+  position: Position;
+}> = [
+  { id: 'left-target', type: 'target', position: Position.Left },
+  { id: 'left-source', type: 'source', position: Position.Left },
+  { id: 'right-target', type: 'target', position: Position.Right },
+  { id: 'right-source', type: 'source', position: Position.Right },
+  { id: 'top-target', type: 'target', position: Position.Top },
+  { id: 'top-source', type: 'source', position: Position.Top },
+  { id: 'bottom-target', type: 'target', position: Position.Bottom },
+  { id: 'bottom-source', type: 'source', position: Position.Bottom },
+];
+const SIMILARITY_HANDLE_SIDES: SimilarityNodeHandleSide[] = ['left', 'right', 'top', 'bottom'];
+const SIMILARITY_SIDE_TO_POSITION: Record<SimilarityNodeHandleSide, Position> = {
+  left: Position.Left,
+  right: Position.Right,
+  top: Position.Top,
+  bottom: Position.Bottom,
+};
 
 const nodeTypes = {
   similarityNode: SimilarityNode,
@@ -610,6 +675,318 @@ function scaleLayoutPosition(
   };
 }
 
+function getSimilarityNodeCenter(node: SimilarityNodeType): LayoutPoint {
+  const nodeScale = Math.max(0.01, node.data.nodeScale ?? 1);
+
+  return {
+    x: node.position.x + (SOURCE_NODE_WIDTH * nodeScale) / 2,
+    y: node.position.y + (SOURCE_NODE_HEIGHT * nodeScale) / 2,
+  };
+}
+
+function getSimilarityNodeSize(node: SimilarityNodeType): { width: number; height: number } {
+  const nodeScale = Math.max(0.01, node.data.nodeScale ?? 1);
+
+  return {
+    width: SOURCE_NODE_WIDTH * nodeScale,
+    height: SOURCE_NODE_HEIGHT * nodeScale,
+  };
+}
+
+function getSimilarityNodeBounds(node: SimilarityNodeType): { left: number; right: number; top: number; bottom: number } {
+  const size = getSimilarityNodeSize(node);
+
+  return {
+    left: node.position.x,
+    right: node.position.x + size.width,
+    top: node.position.y,
+    bottom: node.position.y + size.height,
+  };
+}
+
+function getSimilarityHandlePoint(
+  center: LayoutPoint,
+  size: { width: number; height: number },
+  side: SimilarityNodeHandleSide,
+): LayoutPoint {
+  switch (side) {
+    case 'left':
+      return { x: center.x - size.width / 2, y: center.y };
+    case 'right':
+      return { x: center.x + size.width / 2, y: center.y };
+    case 'top':
+      return { x: center.x, y: center.y - size.height / 2 };
+    case 'bottom':
+      return { x: center.x, y: center.y + size.height / 2 };
+  }
+}
+
+function getSimilarityHandleNormal(side: SimilarityNodeHandleSide): LayoutPoint {
+  switch (side) {
+    case 'left':
+      return { x: -1, y: 0 };
+    case 'right':
+      return { x: 1, y: 0 };
+    case 'top':
+      return { x: 0, y: -1 };
+    case 'bottom':
+      return { x: 0, y: 1 };
+  }
+}
+
+function isVerticalSimilaritySide(side: SimilarityNodeHandleSide): boolean {
+  return side === 'top' || side === 'bottom';
+}
+
+function normalizeLayoutVector(vector: LayoutPoint): LayoutPoint {
+  const length = Math.hypot(vector.x, vector.y);
+  if (length === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+  };
+}
+
+function distanceBetweenPoints(left: LayoutPoint, right: LayoutPoint): number {
+  return Math.hypot(left.x - right.x, left.y - right.y);
+}
+
+function distancePointToRect(point: LayoutPoint, rect: { left: number; right: number; top: number; bottom: number }): number {
+  const dx =
+    point.x < rect.left ? rect.left - point.x : point.x > rect.right ? point.x - rect.right : 0;
+  const dy =
+    point.y < rect.top ? rect.top - point.y : point.y > rect.bottom ? point.y - rect.bottom : 0;
+
+  return Math.hypot(dx, dy);
+}
+
+function sampleSimilarityBezier(
+  sourcePoint: LayoutPoint,
+  sourceControl: LayoutPoint,
+  targetControl: LayoutPoint,
+  targetPoint: LayoutPoint,
+  t: number,
+): LayoutPoint {
+  const mt = 1 - t;
+  const mt2 = mt * mt;
+  const t2 = t * t;
+  const a = mt2 * mt;
+  const b = 3 * mt2 * t;
+  const c = 3 * mt * t2;
+  const d = t2 * t;
+
+  return {
+    x: a * sourcePoint.x + b * sourceControl.x + c * targetControl.x + d * targetPoint.x,
+    y: a * sourcePoint.y + b * sourceControl.y + c * targetControl.y + d * targetPoint.y,
+  };
+}
+
+function estimateSimilarityBezierBulge(
+  sourcePoint: LayoutPoint,
+  sourceControl: LayoutPoint,
+  targetControl: LayoutPoint,
+  targetPoint: LayoutPoint,
+): number {
+  const chordDx = targetPoint.x - sourcePoint.x;
+  const chordDy = targetPoint.y - sourcePoint.y;
+  const chordLength = Math.max(1, Math.hypot(chordDx, chordDy));
+  const samples = [0.2, 0.35, 0.5, 0.65, 0.8];
+  let maxDeviation = 0;
+
+  for (const t of samples) {
+    const point = sampleSimilarityBezier(sourcePoint, sourceControl, targetControl, targetPoint, t);
+    const deviation = Math.abs((point.x - sourcePoint.x) * chordDy - (point.y - sourcePoint.y) * chordDx) / chordLength;
+    maxDeviation = Math.max(maxDeviation, deviation);
+  }
+
+  return maxDeviation;
+}
+
+function estimateSimilarityArcClearancePenalty(
+  sourcePoint: LayoutPoint,
+  sourceControl: LayoutPoint,
+  targetControl: LayoutPoint,
+  targetPoint: LayoutPoint,
+  sourceNode: SimilarityNodeType,
+  targetNode: SimilarityNodeType,
+  allNodes: SimilarityNodeType[],
+): number {
+  const sizeBias = (getSimilarityNodeSize(sourceNode).width + getSimilarityNodeSize(sourceNode).height + getSimilarityNodeSize(targetNode).width + getSimilarityNodeSize(targetNode).height) / 4;
+  const desiredClearance = Math.max(16, Math.min(46, sizeBias * 0.18));
+  const samplePoints = [0.12, 0.25, 0.38, 0.5, 0.62, 0.75, 0.88];
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (const otherNode of allNodes) {
+    if (otherNode.id === sourceNode.id || otherNode.id === targetNode.id) {
+      continue;
+    }
+
+    const bounds = getSimilarityNodeBounds(otherNode);
+    for (const t of samplePoints) {
+      const point = sampleSimilarityBezier(sourcePoint, sourceControl, targetControl, targetPoint, t);
+      minDistance = Math.min(minDistance, distancePointToRect(point, bounds));
+    }
+  }
+
+  if (!Number.isFinite(minDistance)) {
+    return 0;
+  }
+
+  if (minDistance >= desiredClearance) {
+    return 0;
+  }
+
+  return (desiredClearance - minDistance) / desiredClearance;
+}
+
+function getSimilarityBezierControl(
+  point: LayoutPoint,
+  otherPoint: LayoutPoint,
+  position: Position,
+): LayoutPoint {
+  const controlOffset = (distance: number) => {
+    if (distance >= 0) {
+      return 0.5 * distance;
+    }
+
+    return SIMILARITY_EDGE_CURVATURE * 25 * Math.sqrt(-distance);
+  };
+
+  switch (position) {
+    case Position.Left:
+      return { x: point.x - controlOffset(point.x - otherPoint.x), y: point.y };
+    case Position.Right:
+      return { x: point.x + controlOffset(otherPoint.x - point.x), y: point.y };
+    case Position.Top:
+      return { x: point.x, y: point.y - controlOffset(point.y - otherPoint.y) };
+    case Position.Bottom:
+      return { x: point.x, y: point.y + controlOffset(otherPoint.y - point.y) };
+  }
+}
+
+function getSimilarityHandlePairScore(
+  sourceNode: SimilarityNodeType,
+  targetNode: SimilarityNodeType,
+  sourceSide: SimilarityNodeHandleSide,
+  targetSide: SimilarityNodeHandleSide,
+  allNodes: SimilarityNodeType[],
+): number {
+  const sourceCenter = getSimilarityNodeCenter(sourceNode);
+  const targetCenter = getSimilarityNodeCenter(targetNode);
+  const sourceSize = getSimilarityNodeSize(sourceNode);
+  const targetSize = getSimilarityNodeSize(targetNode);
+  const sourcePoint = getSimilarityHandlePoint(sourceCenter, sourceSize, sourceSide);
+  const targetPoint = getSimilarityHandlePoint(targetCenter, targetSize, targetSide);
+  const sourceControl = getSimilarityBezierControl(sourcePoint, targetPoint, SIMILARITY_SIDE_TO_POSITION[sourceSide]);
+  const targetControl = getSimilarityBezierControl(targetPoint, sourcePoint, SIMILARITY_SIDE_TO_POSITION[targetSide]);
+  const sourceVector = normalizeLayoutVector({
+    x: targetCenter.x - sourceCenter.x,
+    y: targetCenter.y - sourceCenter.y,
+  });
+  const targetVector = normalizeLayoutVector({
+    x: sourceCenter.x - targetCenter.x,
+    y: sourceCenter.y - targetCenter.y,
+  });
+  const sourceNormal = getSimilarityHandleNormal(sourceSide);
+  const targetNormal = getSimilarityHandleNormal(targetSide);
+  const sourceAlignment = Math.max(0, sourceVector.x * sourceNormal.x + sourceVector.y * sourceNormal.y);
+  const targetAlignment = Math.max(0, targetVector.x * targetNormal.x + targetVector.y * targetNormal.y);
+  const sourceAlignmentPenalty = Math.pow(1 - sourceAlignment, 1.65);
+  const targetAlignmentPenalty = Math.pow(1 - targetAlignment, 1.65);
+  const controlPolygonLength =
+    distanceBetweenPoints(sourcePoint, sourceControl) +
+    distanceBetweenPoints(sourceControl, targetControl) +
+    distanceBetweenPoints(targetControl, targetPoint);
+  const directHandleLength = distanceBetweenPoints(sourcePoint, targetPoint);
+  const sizeBias = (sourceSize.width + sourceSize.height + targetSize.width + targetSize.height) / 4;
+  const chordLength = Math.max(1, distanceBetweenPoints(sourceCenter, targetCenter));
+  const absDx = Math.abs(targetCenter.x - sourceCenter.x);
+  const absDy = Math.abs(targetCenter.y - sourceCenter.y);
+  const totalAxisDistance = Math.max(1, absDx + absDy);
+  const verticalPressure =
+    Math.pow(absDy / totalAxisDistance, SIMILARITY_AXIS_PREFERENCE_POWER) *
+    (1 - clamp01(absDx / Math.max(1, Math.min(sourceSize.width, targetSize.width) * SIMILARITY_AXIS_PREFERENCE_SPAN)));
+  const horizontalPressure =
+    Math.pow(absDx / totalAxisDistance, SIMILARITY_AXIS_PREFERENCE_POWER) *
+    (1 - clamp01(absDy / Math.max(1, Math.min(sourceSize.height, targetSize.height) * SIMILARITY_AXIS_PREFERENCE_SPAN)));
+  const preferredSourceSide: SimilarityNodeHandleSide = targetCenter.y < sourceCenter.y ? 'top' : 'bottom';
+  const preferredTargetSide: SimilarityNodeHandleSide = targetCenter.x >= sourceCenter.x ? 'right' : 'left';
+  const sourceDirectionPenalty =
+    sourceSide === preferredSourceSide ? 0 : verticalPressure * sizeBias * SIMILARITY_AXIS_PENALTY_WEIGHT;
+  const targetDirectionPenalty =
+    targetSide === preferredTargetSide ? 0 : horizontalPressure * sizeBias * SIMILARITY_AXIS_PENALTY_WEIGHT;
+  const bulge = estimateSimilarityBezierBulge(sourcePoint, sourceControl, targetControl, targetPoint);
+  const arcBudget = Math.max(14, Math.min(54, chordLength * 0.18 + sizeBias * 0.08));
+  const steepnessPenalty =
+    (Math.max(0, bulge - arcBudget) / Math.max(1, arcBudget)) * sizeBias * (0.9 + Math.max(verticalPressure, horizontalPressure) * 0.35);
+  const clearancePenalty =
+    estimateSimilarityArcClearancePenalty(
+      sourcePoint,
+      sourceControl,
+      targetControl,
+      targetPoint,
+      sourceNode,
+      targetNode,
+      allNodes,
+    ) * sizeBias * 1.1;
+
+  return (
+    controlPolygonLength +
+    directHandleLength * 0.08 +
+    (sourceAlignmentPenalty + targetAlignmentPenalty) * sizeBias * 0.18 +
+    steepnessPenalty +
+    clearancePenalty +
+    sourceDirectionPenalty +
+    targetDirectionPenalty
+  );
+}
+
+function chooseSimilarityHandlePair(
+  sourceNode: SimilarityNodeType,
+  targetNode: SimilarityNodeType,
+  allNodes: SimilarityNodeType[],
+): SimilarityHandlePairChoice {
+  let bestScore = Number.POSITIVE_INFINITY;
+  let bestChoice: SimilarityHandlePairChoice | null = null;
+
+  for (const sourceSide of SIMILARITY_HANDLE_SIDES) {
+    for (const targetSide of SIMILARITY_HANDLE_SIDES) {
+      const score = getSimilarityHandlePairScore(sourceNode, targetNode, sourceSide, targetSide, allNodes);
+      if (score >= bestScore) {
+        continue;
+      }
+
+      bestScore = score;
+      bestChoice = {
+        source: {
+          handleId: SIMILARITY_HANDLE_IDS[sourceSide].source,
+          position: SIMILARITY_SIDE_TO_POSITION[sourceSide],
+        },
+        target: {
+          handleId: SIMILARITY_HANDLE_IDS[targetSide].target,
+          position: SIMILARITY_SIDE_TO_POSITION[targetSide],
+        },
+      };
+    }
+  }
+
+  return (
+    bestChoice ?? {
+      source: {
+        handleId: SIMILARITY_HANDLE_IDS.right.source,
+        position: Position.Right,
+      },
+      target: {
+        handleId: SIMILARITY_HANDLE_IDS.left.target,
+        position: Position.Left,
+      },
+    }
+  );
+}
+
 export function SimilarityGraphPage({
   graph,
   busy,
@@ -798,19 +1175,53 @@ export function SimilarityGraphPage({
     });
   }, [clusteredPositions, graphResponse, layoutScale, nodeScales, nodeStrengths, sources]);
 
+  const flowNodeIndex = useMemo(() => {
+    const index = new Map<string, SimilarityFlowNodeIndexEntry>();
+
+    for (const node of flowNodes) {
+      index.set(node.id, {
+        node,
+        center: getSimilarityNodeCenter(node),
+      });
+    }
+
+    return index;
+  }, [flowNodes]);
+
   const flowEdges: SimilarityEdgeType[] = useMemo(() => {
-    return visibleEdges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      type: 'similarityEdge',
-      data: {
-        score: edge.score,
-        percentage: edge.percentage,
-      },
-      selectable: true,
-    }));
-  }, [visibleEdges]);
+    return visibleEdges.map((edge) => {
+      const sourceEntry = flowNodeIndex.get(edge.source);
+      const targetEntry = flowNodeIndex.get(edge.target);
+      const pairChoice =
+        sourceEntry && targetEntry ? chooseSimilarityHandlePair(sourceEntry.node, targetEntry.node, flowNodes) : null;
+      const sourceChoice =
+        pairChoice?.source ?? {
+          handleId: SIMILARITY_HANDLE_IDS.right.source,
+          position: Position.Right,
+        };
+      const targetChoice =
+        pairChoice?.target ?? {
+          handleId: SIMILARITY_HANDLE_IDS.left.target,
+          position: Position.Left,
+        };
+
+      return {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: sourceChoice.handleId,
+        targetHandle: targetChoice.handleId,
+        sourcePosition: sourceChoice.position,
+        targetPosition: targetChoice.position,
+        type: 'similarityEdge',
+        data: {
+          score: edge.score,
+          percentage: edge.percentage,
+        },
+        selectable: true,
+      };
+    });
+  }, [flowNodeIndex, visibleEdges]);
 
   const selectedNode = useMemo(
     () => flowNodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -1181,7 +1592,9 @@ function SimilarityNode({ data, selected }: NodeProps<SimilarityNodeType>) {
       } as CSSProperties}
       title={data.note}
     >
-      <Handle type="target" position={Position.Left} className="similarity-node__handle" />
+      {SIMILARITY_NODE_HANDLE_LAYOUT.map(({ id, type, position }) => (
+        <Handle key={id} id={id} type={type} position={position} className="similarity-node__handle" />
+      ))}
 
       <div className="similarity-node__head">
         <div className="similarity-node__titles">
@@ -1197,7 +1610,6 @@ function SimilarityNode({ data, selected }: NodeProps<SimilarityNodeType>) {
         <span>{data.metadata.structural_tokens} tokens</span>
       </div>
 
-      <Handle type="source" position={Position.Right} className="similarity-node__handle" />
     </article>
   );
 }
@@ -1220,7 +1632,7 @@ function SimilarityEdge({
     targetY,
     sourcePosition,
     targetPosition,
-    curvature: 0.28,
+    curvature: SIMILARITY_EDGE_CURVATURE,
   });
 
   const score = Math.max(0, Math.min(1, data?.score ?? 0));
