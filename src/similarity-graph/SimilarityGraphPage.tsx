@@ -110,6 +110,7 @@ interface SimilarityNodeData extends Record<string, unknown> {
   nodeUid: string;
   variantLabel: string;
   metadata: SimilarityGraphNodeMetadata;
+  nodeScale: number;
   strength: number;
   neighborCount: number;
   accentColor: string;
@@ -123,13 +124,15 @@ interface SimilarityEdgeData extends Record<string, unknown> {
 type SimilarityNodeType = Node<SimilarityNodeData, 'similarityNode'>;
 type SimilarityEdgeType = Edge<SimilarityEdgeData, 'similarityEdge'>;
 
-const SOURCE_NODE_WIDTH = 220;
-const SOURCE_NODE_HEIGHT = 110;
 const MIN_GRAPH_THRESHOLD = 0.1;
 const MAX_GRAPH_THRESHOLD = 0.95;
 const DEFAULT_GRAPH_THRESHOLD = 0.55;
 const DEFAULT_LAYOUT_SCALE = 1;
 const DEFAULT_FOCUS_ZOOM = 1.08;
+const SOURCE_NODE_WIDTH = 220;
+const SOURCE_NODE_HEIGHT = 110;
+const MIN_NODE_SCALE = 0.88;
+const MAX_NODE_SCALE = 1.55;
 
 const nodeTypes = {
   similarityNode: SimilarityNode,
@@ -256,13 +259,27 @@ function clampThreshold(value: number): number {
   return Math.max(MIN_GRAPH_THRESHOLD, Math.min(MAX_GRAPH_THRESHOLD, value));
 }
 
+function getSimilarityNodeScale(totalKeys: number, minKeys: number, maxKeys: number): number {
+  const keys = Math.max(1, totalKeys);
+  const min = Math.max(1, minKeys);
+  const max = Math.max(min, maxKeys);
+
+  if (max <= min) {
+    return 1;
+  }
+
+  const normalized = Math.max(0, Math.min(1, (keys - min) / (max - min)));
+  return MIN_NODE_SCALE + normalized * (MAX_NODE_SCALE - MIN_NODE_SCALE);
+}
+
 function scaleLayoutPosition(
   position: { x: number; y: number },
   scale: number,
+  nodeScale: number,
 ): { x: number; y: number } {
   return {
-    x: position.x * scale - SOURCE_NODE_WIDTH / 2,
-    y: position.y * scale - SOURCE_NODE_HEIGHT / 2,
+    x: position.x * scale - (SOURCE_NODE_WIDTH * nodeScale) / 2,
+    y: position.y * scale - (SOURCE_NODE_HEIGHT * nodeScale) / 2,
   };
 }
 
@@ -385,6 +402,19 @@ export function SimilarityGraphPage({
     return Math.min(2.1, DEFAULT_LAYOUT_SCALE + (nodeCount - 8) * 0.06);
   }, [graphResponse?.nodes.length]);
 
+  const keyRange = useMemo(() => {
+    if (!graphResponse || graphResponse.nodes.length === 0) {
+      return { min: 1, max: 1 };
+    }
+
+    const values = graphResponse.nodes.map((node) => Math.max(1, node.metadata.total_keys));
+
+    return {
+      min: Math.min(...values),
+      max: Math.max(...values),
+    };
+  }, [graphResponse]);
+
   const flowNodes: SimilarityNodeType[] = useMemo(() => {
     if (!graphResponse) {
       return [];
@@ -394,11 +424,12 @@ export function SimilarityGraphPage({
       const source = sources[node.metadata.index];
       const strength = nodeStrengths.get(node.id)?.strongest ?? 0;
       const neighborCount = nodeStrengths.get(node.id)?.count ?? 0;
+      const nodeScale = getSimilarityNodeScale(node.metadata.total_keys, keyRange.min, keyRange.max);
 
       return {
         id: node.id,
         type: 'similarityNode',
-        position: scaleLayoutPosition(node.position, layoutScale),
+        position: scaleLayoutPosition(node.position, layoutScale, nodeScale),
         data: {
           label: node.label,
           description: node.description,
@@ -407,18 +438,16 @@ export function SimilarityGraphPage({
           nodeUid: source?.nodeUid ?? node.id,
           variantLabel: source?.variantLabel ?? 'основной',
           metadata: node.metadata,
+          nodeScale,
           strength,
           neighborCount,
           accentColor: source?.nodeColor ?? '#2f8f83',
         },
         draggable: false,
         selectable: true,
-        style: {
-          width: `${SOURCE_NODE_WIDTH}px`,
-        },
       };
     });
-  }, [graphResponse, layoutScale, nodeStrengths, sources]);
+  }, [graphResponse, keyRange.max, keyRange.min, layoutScale, nodeStrengths, sources]);
 
   const flowEdges: SimilarityEdgeType[] = useMemo(() => {
     return visibleEdges.map((edge) => ({
@@ -487,12 +516,14 @@ export function SimilarityGraphPage({
       return;
     }
 
+    const nodeScale = node.data.nodeScale;
+
     setSelectedNodeId(node.id);
     setSelectedEdgeId(null);
 
     reactFlowRef.current.setCenter(
-      node.position.x + SOURCE_NODE_WIDTH / 2,
-      node.position.y + SOURCE_NODE_HEIGHT / 2,
+      node.position.x + (SOURCE_NODE_WIDTH * nodeScale) / 2,
+      node.position.y + (SOURCE_NODE_HEIGHT * nodeScale) / 2,
       {
         zoom: DEFAULT_FOCUS_ZOOM,
         duration: 220,
@@ -795,7 +826,10 @@ function SimilarityNode({ data, selected }: NodeProps<SimilarityNodeType>) {
   return (
     <article
       className={`similarity-node similarity-node--${tone}${selected ? ' is-selected' : ''}`}
-      style={{ '--node-color': data.accentColor } as CSSProperties}
+      style={{
+        '--node-color': data.accentColor,
+        '--similarity-node-scale': `${data.nodeScale}`,
+      } as CSSProperties}
       title={data.note}
     >
       <Handle type="target" position={Position.Left} className="similarity-node__handle" />

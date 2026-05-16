@@ -2069,6 +2069,9 @@ button.is-active {
   display: grid;
   gap: 0.55rem;
   padding: 0.85rem 0.9rem;
+  width: 220px;
+  min-height: 110px;
+  box-sizing: border-box;
   border-radius: 14px;
   background: rgba(10, 14, 20, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2077,6 +2080,9 @@ button.is-active {
     0 0 0 1px var(--node-color, var(--accent));
   color: #edf3f7;
   user-select: none;
+  transform-origin: top left;
+  transform: scale(var(--similarity-node-scale, 1));
+  will-change: transform;
 }
 
 .similarity-node--high {
