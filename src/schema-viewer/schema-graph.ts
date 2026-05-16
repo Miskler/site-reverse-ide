@@ -11,6 +11,7 @@ import type {
 } from './schema-types';
 import { createSourceHandleId } from './handle-ids';
 import { getPresentationNode } from './node-presentation';
+import { getRelationBadge, getRelationLabelForChild } from './relation-labels';
 
 const OBJECT_WIDTH = 316;
 const ARRAY_WIDTH = 304;
@@ -126,7 +127,7 @@ export function getSelectionDetails(
 
   return {
     heading: row.label,
-    badge: row.required ? 'required field' : row.relation,
+    badge: getRelationBadge(model.nodeMap, row),
     description: row.description ?? parent?.description,
     facts: [
       parent ? `parent: ${parent.title}` : null,
@@ -347,6 +348,7 @@ function addChildRow(
 
   if (childNodeId && (!childIsEmbedded || childIsSelf)) {
     const edgeId = `e-${node.id}-${rowId}-${childNodeId}`;
+    const relationLabel = getRelationLabelForChild(input.relation, childNode);
 
     context.edges.set(edgeId, {
       id: edgeId,
@@ -354,7 +356,7 @@ function addChildRow(
       target: childNodeId,
       sourceHandle: row.handleId,
       sourceRowId: row.id,
-      label: input.relation,
+      label: relationLabel,
       labelPosition: 'center',
     });
   }
