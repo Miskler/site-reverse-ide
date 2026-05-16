@@ -160,6 +160,8 @@ const SIMILARITY_EDGE_CURVATURE = 0.28;
 const SIMILARITY_AXIS_PREFERENCE_POWER = 0.68;
 const SIMILARITY_AXIS_PREFERENCE_SPAN = 2.35;
 const SIMILARITY_AXIS_PENALTY_WEIGHT = 2.7;
+const SIMILARITY_EDGE_MIN_STROKE_WIDTH = 1.1;
+const SIMILARITY_EDGE_STROKE_WIDTH_RANGE = 8.8;
 const SIMILARITY_HANDLE_IDS: Record<
   SimilarityNodeHandleSide,
   Record<SimilarityNodeHandleRole, SimilarityNodeHandleId>
@@ -1637,7 +1639,7 @@ function SimilarityEdge({
 
   const score = Math.max(0, Math.min(1, data?.score ?? 0));
   const opacity = Math.max(0.14, Math.min(0.9, 0.12 + score * 0.88));
-  const strokeWidth = 1.1 + score * 4.4;
+  const strokeWidth = SIMILARITY_EDGE_MIN_STROKE_WIDTH + score * SIMILARITY_EDGE_STROKE_WIDTH_RANGE;
   const percentage = typeof data?.percentage === 'number' ? data.percentage : score * 100;
 
   return (
