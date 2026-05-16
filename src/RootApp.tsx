@@ -35,7 +35,6 @@ export function RootApp() {
   const [graphDocument, setGraphDocument] = useState<GraphDocument | null>(null);
   const [graphBusy, setGraphBusy] = useState(true);
   const [graphLoadError, setGraphLoadError] = useState<string | null>(null);
-  const [schemaMenuOpen, setSchemaMenuOpen] = useState(() => route.kind === 'schema');
   const rootShellStyle: CSSProperties = {
     '--root-nav-width': '320px',
   } as CSSProperties;
@@ -60,12 +59,10 @@ export function RootApp() {
 
   const navigateSchemaNode = useCallback((nodeUid: string, jsonIndex: number | null = null) => {
     pushSchemaNodeRoute(nodeUid, jsonIndex);
-    setSchemaMenuOpen(true);
     setRoute(resolveAppRoute(window.location.pathname, window.history.state));
   }, []);
 
   const backToGraph = useCallback(() => {
-    setSchemaMenuOpen(false);
     setRoute({ kind: 'graph' });
     window.history.pushState(null, '', '/');
   }, []);
@@ -112,9 +109,7 @@ export function RootApp() {
           loadError={graphLoadError}
           currentNodeUid={route.kind === 'schema' ? route.nodeUid : ''}
           routeKind={route.kind}
-          isSchemaMenuOpen={schemaMenuOpen}
           onGoToGraph={backToGraph}
-          onToggleSchemaMenu={() => setSchemaMenuOpen((value) => !value)}
           onOpenSchemaNode={navigateSchemaNode}
         />
 

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { GraphDocument } from '../shared/graph';
 
 interface SchemaNavigationPanelProps {
@@ -6,9 +7,7 @@ interface SchemaNavigationPanelProps {
   loadError: string | null;
   currentNodeUid: string;
   routeKind: 'graph' | 'schema';
-  isSchemaMenuOpen: boolean;
   onGoToGraph: () => void;
-  onToggleSchemaMenu: () => void;
   onOpenSchemaNode: (nodeUid: string, jsonIndex?: number | null) => void;
 }
 
@@ -18,16 +17,38 @@ export function SchemaNavigationPanel({
   loadError,
   currentNodeUid,
   routeKind,
-  isSchemaMenuOpen,
   onGoToGraph,
-  onToggleSchemaMenu,
   onOpenSchemaNode,
 }: SchemaNavigationPanelProps) {
   const nodes = graph?.nodes ?? [];
+  const [isSchemaMenuOpen, setSchemaMenuOpen] = useState(() => routeKind === 'schema');
+  const [schemaArrowTurns, setSchemaArrowTurns] = useState(() => (routeKind === 'schema' ? 180 : 0));
+  const previousSchemaMenuOpen = useRef(isSchemaMenuOpen);
+
+  useEffect(() => {
+    setSchemaMenuOpen(routeKind === 'schema');
+  }, [routeKind]);
+
+  useEffect(() => {
+    if (previousSchemaMenuOpen.current === isSchemaMenuOpen) {
+      return;
+    }
+
+    previousSchemaMenuOpen.current = isSchemaMenuOpen;
+    setSchemaArrowTurns((currentTurns) => currentTurns + 180);
+  }, [isSchemaMenuOpen]);
+
   const isSchemaActive = routeKind === 'schema' || isSchemaMenuOpen;
+  const handleToggleSchemaMenu = () => {
+    setSchemaMenuOpen((value) => !value);
+  };
 
   return (
     <div className="schema-viewer__global-nav">
+      <div className="schema-viewer__nav-header">
+        <span className="schema-viewer__label">Навигация</span>
+      </div>
+
       <div className="schema-viewer__nav-rail">
         <button
           type="button"
@@ -35,15 +56,30 @@ export function SchemaNavigationPanel({
           aria-pressed={routeKind === 'graph'}
           onClick={onGoToGraph}
         >
-          Ноды
+          <span className="schema-viewer__nav-switch-title">Ноды</span>
+          <span className="schema-viewer__nav-switch-caption">Основной canvas</span>
         </button>
         <button
           type="button"
           className={`schema-viewer__nav-switch${isSchemaActive ? ' is-active' : ''}`}
           aria-pressed={isSchemaActive}
-          onClick={onToggleSchemaMenu}
+          aria-expanded={isSchemaMenuOpen}
+          onClick={handleToggleSchemaMenu}
         >
-          Схемы
+          <span className="schema-viewer__nav-switch-main">
+            <span className="schema-viewer__nav-switch-title">Схемы</span>
+          </span>
+          <span className="schema-viewer__nav-switch-arrow" aria-hidden="true">
+            <svg
+              style={{ transform: `translateZ(0) rotate(${schemaArrowTurns}deg)` }}
+              viewBox="0 0 24 24"
+              className="schema-viewer__nav-switch-arrow-icon"
+            >
+              <path d="M6 12h12" />
+              <path d="M13 6l6 6-6 6" />
+            </svg>
+          </span>
+          <span className="schema-viewer__nav-switch-caption">Просмотр схем нод</span>
         </button>
       </div>
 
