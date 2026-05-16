@@ -1663,7 +1663,7 @@ button.is-active {
 
 .similarity-shell {
   display: grid;
-  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(280px, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -1685,11 +1685,6 @@ button.is-active {
 .similarity-shell__panel--details {
   border-right: 0;
   border-left: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.similarity-shell__hero {
-  display: grid;
-  gap: 0.6rem;
 }
 
 .similarity-shell__stats {
@@ -2917,19 +2912,13 @@ button.is-active {
 
   .similarity-shell {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(46vh, 1fr) auto;
+    grid-template-rows: minmax(46vh, 1fr) auto;
     overflow: auto;
-  }
-
-  .similarity-shell__panel {
-    border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .similarity-shell__panel--details {
     border-left: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
-    border-bottom: 0;
   }
 
   .similarity-shell__stats,

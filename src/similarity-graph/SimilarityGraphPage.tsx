@@ -147,9 +147,7 @@ interface SimilarityHandlePairChoice {
   target: SimilarityHandleChoice;
 }
 
-const MIN_GRAPH_THRESHOLD = 0.1;
-const MAX_GRAPH_THRESHOLD = 0.95;
-const DEFAULT_GRAPH_THRESHOLD = 0.55;
+const GRAPH_DENSITY_THRESHOLD = 0.2;
 const DEFAULT_LAYOUT_SCALE = 1;
 const DEFAULT_FOCUS_ZOOM = 1.08;
 const SOURCE_NODE_WIDTH = 220;
@@ -325,10 +323,6 @@ function mapNodeStrengths(edges: SimilarityGraphEdgePayload[]): Map<string, { co
   }
 
   return map;
-}
-
-function clampThreshold(value: number): number {
-  return Math.max(MIN_GRAPH_THRESHOLD, Math.min(MAX_GRAPH_THRESHOLD, value));
 }
 
 function clamp01(value: number): number {
@@ -1001,10 +995,9 @@ export function SimilarityGraphPage({
   const [graphError, setGraphError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [threshold, setThreshold] = useState(DEFAULT_GRAPH_THRESHOLD);
-  const [refreshToken, setRefreshToken] = useState(0);
   const reactFlowRef = useRef<ReactFlowInstance<SimilarityNodeType, SimilarityEdgeType> | null>(null);
   const requestTokenRef = useRef(0);
+  const threshold = GRAPH_DENSITY_THRESHOLD;
 
   const sources = useMemo(() => buildSimilaritySources(graph), [graph]);
   const requestPayload = useMemo(
@@ -1086,7 +1079,7 @@ export function SimilarityGraphPage({
     }, 120);
 
     return () => window.clearTimeout(timeoutId);
-  }, [graph, loadError, refreshToken, requestPayload, sources.length]);
+  }, [graph, loadError, requestPayload, sources.length]);
 
   const visibleEdges = useMemo(() => {
     if (!graphResponse) {
@@ -1322,51 +1315,6 @@ export function SimilarityGraphPage({
 
   return (
     <div className="similarity-shell">
-      <aside className="similarity-shell__panel">
-        <div className="similarity-shell__hero">
-          <div className="schema-viewer__eyebrow">Relations</div>
-          <h1 className="schema-viewer__title">Карта связей JSON</h1>
-          <p className="schema-viewer__lead">
-            Толщина линии показывает крепость совпадения. Это не иерархия, а плотная сеть
-            соседей, как в графе Obsidian.
-          </p>
-        </div>
-
-        <div className="similarity-shell__controls panel">
-          <div className="similarity-shell__controls-head">
-            <span className="schema-viewer__label">Плотность графа</span>
-            <span className="badge">{formatPercent(threshold)}</span>
-          </div>
-
-          <input
-            className="similarity-shell__range"
-            type="range"
-            min={MIN_GRAPH_THRESHOLD}
-            max={MAX_GRAPH_THRESHOLD}
-            step={0.01}
-            value={threshold}
-            onChange={(event) => {
-              setThreshold(clampThreshold(Number(event.target.value)));
-            }}
-          />
-
-          <div className="similarity-shell__range-meta">
-            <span>меньше связей</span>
-            <span>больше связей</span>
-          </div>
-
-          <div className="similarity-shell__controls-actions">
-            <button type="button" className="primary" onClick={() => setRefreshToken((value) => value + 1)}>
-              Пересчитать
-            </button>
-            <button type="button" onClick={onGoToGraph}>
-              Вернуться к canvas
-            </button>
-          </div>
-        </div>
-
-      </aside>
-
       <main className="similarity-shell__canvas">
         {graphBusy ? <div className="similarity-shell__loading-bar" /> : null}
 
