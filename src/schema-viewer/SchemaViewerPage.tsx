@@ -242,11 +242,13 @@ export function SchemaViewerPage({
       return;
     }
 
+    const focusNodeId =
+      node.isEmbedded && node.ownerNodeId !== node.id ? node.ownerNodeId : node.id;
     const token = focusTokenCounter.current + 1;
     focusTokenCounter.current = token;
 
     setSelection({ kind: 'node', nodeId: node.id });
-    setFocusNodeRequest({ nodeId: node.id, token });
+    setFocusNodeRequest({ nodeId: focusNodeId, token });
   }
 
   function showSchemaWarning(message: string) {

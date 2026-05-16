@@ -5,6 +5,7 @@ import {
 } from '@xyflow/react';
 import { useEffect, useMemo, useRef } from 'react';
 import { createTargetHandleId } from './handle-ids';
+import { getPresentationNode } from './node-presentation';
 import type { NodePositions } from './layout';
 import type { SchemaGraphModel, SchemaSelection } from './schema-types';
 import { SchemaNode, type SchemaNodeType } from './SchemaNode';
@@ -43,6 +44,10 @@ export function SchemaCanvas({
 }: SchemaCanvasProps) {
   const reactFlowRef = useRef<ReactFlowInstance<SchemaNodeType, SchemaEdgeType> | null>(null);
   const initialFitPendingRef = useRef(true);
+  const visibleNodeIds = useMemo(
+    () => new Set(model.nodes.filter((node) => !node.isEmbedded).map((node) => node.id)),
+    [model.nodes],
+  );
 
   function fitCanvas(instance: ReactFlowInstance<SchemaNodeType, SchemaEdgeType>) {
     void instance.fitView({
@@ -66,8 +71,15 @@ export function SchemaCanvas({
       return;
     }
 
-    const node = model.nodeMap[focusNodeRequest.nodeId];
-    const position = positions[focusNodeRequest.nodeId];
+    const focusedNode = model.nodeMap[focusNodeRequest.nodeId];
+    const renderNodeId =
+      focusedNode && visibleNodeIds.has(focusedNode.id)
+        ? focusedNode.id
+        : focusedNode?.ownerNodeId && visibleNodeIds.has(focusedNode.ownerNodeId)
+          ? focusedNode.ownerNodeId
+          : focusNodeRequest.nodeId;
+    const node = model.nodeMap[renderNodeId];
+    const position = positions[renderNodeId];
 
     if (!node || !position) {
       return;
@@ -83,46 +95,75 @@ export function SchemaCanvas({
         duration: 250,
       },
     );
-  }, [focusNodeRequest, model.nodeMap, positions]);
+  }, [focusNodeRequest, model.nodeMap, positions, visibleNodeIds]);
 
   const nodes: SchemaNodeType[] = useMemo(
     () =>
-      model.nodes.map((node) => ({
-        id: node.id,
-        type: 'schema',
-        data: {
-          schemaNode: node,
-          selection,
-          onSelectNode,
-          onSelectRow,
-          isSelectedNode: selection?.kind === 'node' && selection.nodeId === node.id,
-          isSelectedRow: selection?.kind === 'row' && selection.nodeId === node.id,
-        },
-        position: positions[node.id] ?? { x: 0, y: 0 },
-        draggable: false,
-        selectable: true,
-        style: {
-          width: node.size.width,
-          height: node.size.height,
-        },
-      })),
-    [model.nodes, onSelectNode, onSelectRow, positions, selection],
+      model.nodes
+        .filter((node) => !node.isEmbedded)
+        .map((node) => {
+          const presentationNode = getPresentationNode(model.nodeMap, node);
+
+          return {
+            id: node.id,
+            type: 'schema',
+            data: {
+              schemaNode: node,
+              nodeMap: model.nodeMap,
+              selection,
+              onSelectNode,
+              onSelectRow,
+              isSelectedNode:
+                selection?.kind === 'node' &&
+                (selection.nodeId === node.id || selection.nodeId === presentationNode.id),
+              isSelectedRow:
+                selection?.kind === 'row' && selection.nodeId === presentationNode.id,
+            },
+            position: positions[node.id] ?? { x: 0, y: 0 },
+            draggable: false,
+            selectable: true,
+            style: {
+              width: node.size.width,
+              height: node.size.height,
+            },
+          };
+        }),
+    [model.nodeMap, model.nodes, onSelectNode, onSelectRow, positions, selection],
   );
 
   const edges: SchemaEdgeType[] = useMemo(
     () =>
-      model.edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: edge.sourceHandle,
-        targetHandle: createTargetHandleId(edge.target),
-        type: 'relation',
-        label: edge.label,
-        data: edge.labelPosition ? { labelPosition: edge.labelPosition } : undefined,
-        selectable: false,
-      })),
-    [model.edges],
+      model.edges.flatMap((edge) => {
+        const sourceNode = model.nodeMap[edge.source];
+        const targetNode = model.nodeMap[edge.target];
+
+        if (!sourceNode || !targetNode || targetNode.isEmbedded) {
+          return [];
+        }
+
+        const renderSourceNodeId = sourceNode.isEmbedded
+          ? sourceNode.ownerNodeId
+          : sourceNode.id;
+
+        if (!visibleNodeIds.has(renderSourceNodeId)) {
+          return [];
+        }
+
+        return [
+          {
+            id: edge.id,
+            source: renderSourceNodeId,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle,
+            targetHandle: createTargetHandleId(edge.target),
+            type: 'relation',
+            label: edge.label,
+            data: edge.labelPosition ? { labelPosition: edge.labelPosition } : undefined,
+            selectable: false,
+          },
+        ];
+      }),
+    [model.edges, model.nodeMap, visibleNodeIds],
   );
 
   return (
@@ -141,7 +182,8 @@ export function SchemaCanvas({
         }
       }}
       onNodeClick={(_, node) => {
-        onSelectNode(node.id);
+        const presentationNode = getPresentationNode(node.data.nodeMap, node.data.schemaNode);
+        onSelectNode(presentationNode.id);
       }}
       onPaneClick={onClearSelection}
       nodesConnectable={false}

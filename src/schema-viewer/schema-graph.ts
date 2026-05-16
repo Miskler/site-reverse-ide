@@ -10,6 +10,7 @@ import type {
   SelectionDetails,
 } from './schema-types';
 import { createSourceHandleId } from './handle-ids';
+import { getPresentationNode } from './node-presentation';
 
 const OBJECT_WIDTH = 316;
 const ARRAY_WIDTH = 304;
@@ -99,14 +100,19 @@ export function getSelectionDetails(
       return null;
     }
 
+    const displayNode = getPresentationNode(model.nodeMap, node);
+    const ownerNode = model.nodeMap[node.ownerNodeId];
+    const headingNode =
+      node.isEmbedded || displayNode !== node ? ownerNode ?? node : displayNode;
+
     return {
-      heading: node.title,
-      badge: node.kind,
-      description: node.description,
-      facts: [node.subtitle, ...node.metaLines].filter(Boolean),
-      schemaPointer: node.pointer,
-      jsonPointer: extractSourceJsonPointer(node.schema),
-      schema: node.schema,
+      heading: headingNode.title,
+      badge: displayNode.kind,
+      description: displayNode.description ?? node.description,
+      facts: [displayNode.subtitle, ...displayNode.metaLines].filter(Boolean),
+      schemaPointer: displayNode.pointer,
+      jsonPointer: extractSourceJsonPointer(displayNode.schema),
+      schema: displayNode.schema,
     };
   }
 
@@ -137,6 +143,10 @@ function ensureNode(
   context: BuildContext,
   pointer: string,
   force: boolean,
+  options?: {
+    embedded?: boolean;
+    ownerNodeId?: string;
+  },
 ): string | undefined {
   const rawSchema = getSchemaAtPointer(context.document, pointer);
 
@@ -171,6 +181,8 @@ function ensureNode(
     metaLines: [],
     schema: effectiveSchema,
     enumValues: [],
+    isEmbedded: options?.embedded ?? false,
+    ownerNodeId: options?.embedded ? options.ownerNodeId ?? nodeId : nodeId,
     size: {
       width: pickWidth(nodeKind),
       height: 120,
@@ -179,7 +191,7 @@ function ensureNode(
 
   context.nodes.set(nodeId, node);
   populateNode(context, node, canonicalPointer, effectiveSchema);
-  node.size = measureNode(node);
+  node.size = measureNode(context, node);
 
   return nodeId;
 }
@@ -268,6 +280,7 @@ function populateArrayNode(
       schema: schema.items,
       required: false,
       childForce: false,
+      embeddedChildNode: true,
     });
   }
 }
@@ -302,11 +315,18 @@ function addChildRow(
     schema: JsonSchema;
     required: boolean;
     childForce: boolean;
+    embeddedChildNode?: boolean;
   },
 ): void {
   const rowId = createRowId(node.id, input.relation, input.label);
-  const childNodeId = ensureNode(context, input.pointer, input.childForce);
-  const resolvedPointer = childNodeId ? context.nodes.get(childNodeId)?.pointer : undefined;
+  const childNodeId = ensureNode(context, input.pointer, input.childForce, {
+    embedded: input.embeddedChildNode,
+    ownerNodeId: node.ownerNodeId,
+  });
+  const childNode = childNodeId ? context.nodes.get(childNodeId) : undefined;
+  const resolvedPointer = childNode?.pointer;
+  const childIsEmbedded = Boolean(childNode?.isEmbedded);
+  const childIsSelf = childNodeId === node.id;
 
   const row: SchemaRow = {
     id: rowId,
@@ -318,14 +338,14 @@ function addChildRow(
     relation: input.relation,
     description: input.schema.description,
     detailLines: createDetailLines(input.schema),
-    handleId: childNodeId ? createSourceHandleId(rowId) : undefined,
+    handleId: childNodeId && !childIsEmbedded ? createSourceHandleId(rowId) : undefined,
     childNodeId,
     schema: input.schema,
   };
 
   node.rows.push(row);
 
-  if (childNodeId) {
+  if (childNodeId && (!childIsEmbedded || childIsSelf)) {
     const edgeId = `e-${node.id}-${rowId}-${childNodeId}`;
 
     context.edges.set(edgeId, {
@@ -643,51 +663,110 @@ function extractEnumValues(schema: JsonSchema): string[] {
   return [];
 }
 
-function measureNode(node: SchemaGraphNode): { width: number; height: number } {
-  if (node.kind === 'enum') {
-    const width = measureEnumWidth(node);
-    const charsPerLine = Math.max(
-      10,
-      Math.floor((width - ENUM_HORIZONTAL_PADDING) / ENUM_AVERAGE_CHAR_WIDTH),
-    );
-    const contentLines = Math.max(
-      1,
-      node.enumValues.reduce(
-        (sum, value) => sum + Math.max(1, Math.ceil(value.length / charsPerLine)),
-        0,
-      ),
-    );
-    const pillCount = Math.max(node.enumValues.length, 1);
-
-    return {
-      width,
-      height: Math.max(
-        172,
-        ENUM_HEADER_HEIGHT +
-          ENUM_LIST_VERTICAL_PADDING +
-          contentLines * ENUM_PILL_LINE_HEIGHT +
-          pillCount * ENUM_PILL_VERTICAL_CHROME +
-          Math.max(0, pillCount - 1) * ENUM_PILL_GAP,
-      ),
-    };
-  }
-
-  if (
-    node.kind === 'array' &&
-    node.rows.length === 1 &&
-    node.rows[0].relation === 'items' &&
-    node.rows[0].handleId
-  ) {
+function measureNode(
+  context: BuildContext,
+  node: SchemaGraphNode,
+  stack = new Set<string>(),
+): { width: number; height: number } {
+  if (stack.has(node.id)) {
     return {
       width: pickWidth(node.kind),
-      height: 84,
+      height: 0,
     };
   }
 
-  return {
-    width: pickWidth(node.kind),
-    height: Math.max(124, 68 + node.rows.length * 42),
-  };
+  stack.add(node.id);
+  try {
+    const displayNode = getPresentationNode(context.nodes, node);
+
+    if (displayNode.kind === 'enum') {
+      const width = measureEnumWidth(displayNode);
+
+      return {
+        width,
+        height: Math.max(172, ENUM_HEADER_HEIGHT + measureEnumContentHeight(displayNode)),
+      };
+    }
+
+    const contentHeight = measureRenderedContentHeight(context, displayNode, new Set<string>());
+    let height = Math.max(124, 68 + contentHeight);
+
+    if (
+      displayNode.kind === 'array' &&
+      contentHeight === 42 &&
+      displayNode.rows[0]?.relation === 'items' &&
+      !displayNode.rows[0]?.childNodeId
+    ) {
+      height = 84;
+    }
+
+    return {
+      width: pickWidth(displayNode.kind),
+      height,
+    };
+  } finally {
+    stack.delete(node.id);
+  }
+}
+
+function measureRenderedContentHeight(
+  context: BuildContext,
+  node: SchemaGraphNode,
+  stack: Set<string>,
+): number {
+  if (stack.has(node.id)) {
+    return 0;
+  }
+
+  stack.add(node.id);
+
+  try {
+    if (node.kind === 'enum') {
+      return measureEnumContentHeight(node);
+    }
+
+    let total = 0;
+
+    for (const row of node.rows) {
+      const childNode = row.childNodeId ? context.nodes.get(row.childNodeId) : undefined;
+
+      if (childNode && childNode.isEmbedded && childNode.id !== node.id && !stack.has(childNode.id)) {
+        total += childNode.kind === 'enum'
+          ? measureEnumContentHeight(childNode)
+          : measureRenderedContentHeight(context, childNode, stack);
+        continue;
+      }
+
+      total += 42;
+    }
+
+    return total;
+  } finally {
+    stack.delete(node.id);
+  }
+}
+
+function measureEnumContentHeight(node: SchemaGraphNode): number {
+  const width = measureEnumWidth(node);
+  const charsPerLine = Math.max(
+    10,
+    Math.floor((width - ENUM_HORIZONTAL_PADDING) / ENUM_AVERAGE_CHAR_WIDTH),
+  );
+  const contentLines = Math.max(
+    1,
+    node.enumValues.reduce(
+      (sum, value) => sum + Math.max(1, Math.ceil(value.length / charsPerLine)),
+      0,
+    ),
+  );
+  const pillCount = Math.max(node.enumValues.length, 1);
+
+  return (
+    ENUM_LIST_VERTICAL_PADDING +
+    contentLines * ENUM_PILL_LINE_HEIGHT +
+    pillCount * ENUM_PILL_VERTICAL_CHROME +
+    Math.max(0, pillCount - 1) * ENUM_PILL_GAP
+  );
 }
 
 function measureEnumWidth(node: SchemaGraphNode): number {

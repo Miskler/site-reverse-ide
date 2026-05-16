@@ -54,6 +54,8 @@ export interface SchemaGraphNode {
   metaLines: string[];
   schema: JsonSchema;
   enumValues: string[];
+  isEmbedded?: boolean;
+  ownerNodeId: string;
   size: {
     width: number;
     height: number;

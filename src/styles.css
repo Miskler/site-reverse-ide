@@ -2791,6 +2791,10 @@ button.is-active {
   background: rgba(47, 143, 131, 0.08);
 }
 
+.schema-node__row.is-recursive {
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
 .schema-node__required {
   width: 1rem;
   color: #ffd08a;
