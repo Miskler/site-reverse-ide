@@ -1019,7 +1019,7 @@ export function App() {
             className="canvas-flow"
           >
             <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={0.75} />
-            <Controls />
+            <Controls className="graph-controls" />
           </ReactFlow>
         </div>
       </main>

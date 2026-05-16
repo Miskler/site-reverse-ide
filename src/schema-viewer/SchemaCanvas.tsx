@@ -153,7 +153,7 @@ export function SchemaCanvas({
       minZoom={SCHEMA_MIN_ZOOM}
       className="schema-canvas"
     >
-      <Controls />
+      <Controls className="graph-controls" />
     </ReactFlow>
   );
 }

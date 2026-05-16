@@ -528,15 +528,6 @@ export function SimilarityGraphPage({
     );
   }
 
-  function openSourceSchema(sourceIndex: number) {
-    const source = sources[sourceIndex];
-    if (!source) {
-      return;
-    }
-
-    onNavigateSchemaNode(source.nodeUid, source.variantIndex);
-  }
-
   function applyInitialFit(instance: ReactFlowInstance<SimilarityNodeType, SimilarityEdgeType>) {
     requestAnimationFrame(() => {
       instance.fitView({
@@ -564,35 +555,6 @@ export function SimilarityGraphPage({
     });
   }, [flowNodes, selectedNode, selectedNodeConnections]);
 
-  const sidebarStats = useMemo(() => {
-    const totalPairs = graphResponse?.meta.pairs ?? 0;
-    const totalNodes = graphResponse?.meta.inputs ?? sources.length;
-    const strongEdges = visibleEdges.filter((edge) => edge.score >= threshold).length;
-
-    return [
-      {
-        label: 'JSON',
-        value: totalNodes,
-        helper: `${sources.length} источников`,
-      },
-      {
-        label: 'Связей',
-        value: totalPairs,
-        helper: `${visibleEdges.length} видимых`,
-      },
-      {
-        label: 'Сильных',
-        value: strongEdges,
-        helper: `порог ${formatPercent(threshold)}`,
-      },
-      {
-        label: 'Средняя сила',
-        value: formatPercent(averageScore),
-        helper: activeEdge ? `пик ${formatPercent(activeEdge.score)}` : 'нет данных',
-      },
-    ];
-  }, [activeEdge, averageScore, graphResponse?.meta.inputs, graphResponse?.meta.pairs, sources.length, threshold, visibleEdges]);
-
   return (
     <div className="similarity-shell">
       <aside className="similarity-shell__panel">
@@ -603,16 +565,6 @@ export function SimilarityGraphPage({
             Толщина линии показывает крепость совпадения. Это не иерархия, а плотная сеть
             соседей, как в графе Obsidian.
           </p>
-        </div>
-
-        <div className="similarity-shell__stats">
-          {sidebarStats.map((item) => (
-            <div key={item.label} className="similarity-shell__stat">
-              <span className="similarity-shell__stat-label">{item.label}</span>
-              <strong>{item.value}</strong>
-              <span className="similarity-shell__stat-helper">{item.helper}</span>
-            </div>
-          ))}
         </div>
 
         <div className="similarity-shell__controls panel">
@@ -670,64 +622,6 @@ export function SimilarityGraphPage({
           </div>
         </div>
 
-        <section className="similarity-shell__section">
-          <div className="schema-viewer__section-head">
-            <span className="schema-viewer__label">Источники</span>
-            <span className="schema-viewer__nav-count">{sources.length}</span>
-          </div>
-
-          {busy && !graph ? (
-            <p className="schema-viewer__nav-state">Загружаю текущий граф...</p>
-          ) : loadError && sources.length === 0 ? (
-            <p className="schema-viewer__nav-state schema-viewer__nav-state--error">{loadError}</p>
-          ) : sources.length === 0 ? (
-            <div className="empty-inspector">
-              <p>В canvas пока нет JSON-источников.</p>
-              <p>Добавь хотя бы две ноды с `rawJsons`, и карта связей появится здесь.</p>
-            </div>
-          ) : (
-            <div className="similarity-shell__source-list">
-              {sources.map((source, index) => {
-                const responseNodeId = `input-${index + 1}`;
-                const isActive = selectedNodeId === responseNodeId;
-
-                return (
-                  <article
-                    key={`${source.nodeUid}-${source.variantIndex}-${index}`}
-                    className={`similarity-shell__source-card${isActive ? ' is-active' : ''}`}
-                    style={{ '--source-color': source.nodeColor } as CSSProperties}
-                  >
-                    <button
-                      type="button"
-                      className="similarity-shell__source-main"
-                      onClick={() => focusFlowNode(responseNodeId)}
-                      title={source.note}
-                    >
-                      <span className="similarity-shell__source-title">{source.label}</span>
-                      <span className="similarity-shell__source-summary">{source.note}</span>
-                    </button>
-
-                    <div className="similarity-shell__source-meta">
-                      <span>{formatByteSize(source.rawJson)}</span>
-                      <span>{source.nodeMethod}</span>
-                      <span>{source.totalVariants} шт.</span>
-                    </div>
-
-                    <div className="similarity-shell__source-actions">
-                      <button
-                        type="button"
-                        className="similarity-shell__source-link"
-                        onClick={() => openSourceSchema(index)}
-                      >
-                        Открыть схему
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
       </aside>
 
       <main className="similarity-shell__canvas">
@@ -765,7 +659,7 @@ export function SimilarityGraphPage({
             className="similarity-shell__flow"
           >
             <Background variant={BackgroundVariant.Dots} gap={24} size={1.1} />
-            <Controls />
+            <Controls className="graph-controls" />
           </ReactFlow>
         ) : (
           <div className="similarity-shell__empty">
