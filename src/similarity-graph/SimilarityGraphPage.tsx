@@ -85,6 +85,11 @@ interface SimilarityGraphEdgePayload {
   };
 }
 
+interface LayoutPoint {
+  x: number;
+  y: number;
+}
+
 interface SimilarityGraphResponse {
   nodes: SimilarityGraphNodePayload[];
   edges: SimilarityGraphEdgePayload[];
@@ -259,6 +264,10 @@ function clampThreshold(value: number): number {
   return Math.max(MIN_GRAPH_THRESHOLD, Math.min(MAX_GRAPH_THRESHOLD, value));
 }
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
 function getSimilarityNodeScale(totalKeys: number, minKeys: number, maxKeys: number): number {
   const keys = Math.max(1, totalKeys);
   const min = Math.max(1, minKeys);
@@ -270,6 +279,324 @@ function getSimilarityNodeScale(totalKeys: number, minKeys: number, maxKeys: num
 
   const normalized = Math.max(0, Math.min(1, (keys - min) / (max - min)));
   return MIN_NODE_SCALE + normalized * (MAX_NODE_SCALE - MIN_NODE_SCALE);
+}
+
+function getSimilarityNodeCollisionRadius(nodeScale: number): number {
+  const width = SOURCE_NODE_WIDTH * nodeScale;
+  const height = SOURCE_NODE_HEIGHT * nodeScale;
+  return Math.hypot(width, height) * 0.5 + 18;
+}
+
+function computeSimilarityCutoff(edges: SimilarityGraphEdgePayload[]): number {
+  if (edges.length === 0) {
+    return 1;
+  }
+
+  const scores = edges.map((edge) => clamp01(edge.score));
+  const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  const variance =
+    scores.reduce((sum, score) => sum + ((score - mean) ** 2), 0) / Math.max(1, scores.length);
+  const standardDeviation = Math.sqrt(variance);
+
+  return Math.max(0, Math.min(1, mean + standardDeviation * 0.15));
+}
+
+function circularMean(angles: number[]): number {
+  if (angles.length === 0) {
+    return 0;
+  }
+
+  let x = 0;
+  let y = 0;
+  for (const angle of angles) {
+    x += Math.cos(angle);
+    y += Math.sin(angle);
+  }
+
+  return Math.atan2(y, x);
+}
+
+function buildClusteredSimilarityPositions(
+  nodes: SimilarityGraphNodePayload[],
+  edges: SimilarityGraphEdgePayload[],
+  nodeScales: Map<string, number>,
+): Map<string, LayoutPoint> {
+  if (nodes.length === 0) {
+    return new Map();
+  }
+
+  const basePositions = new Map<string, LayoutPoint>();
+  const nodeStrengths = new Map<string, number>();
+  const parent = new Map<string, string>();
+  const radii = new Map<string, number>();
+
+  for (const node of nodes) {
+    basePositions.set(node.id, { x: node.position.x, y: node.position.y });
+    nodeStrengths.set(node.id, 0);
+    parent.set(node.id, node.id);
+    radii.set(node.id, getSimilarityNodeCollisionRadius(nodeScales.get(node.id) ?? 1));
+  }
+
+  function findRoot(nodeId: string): string {
+    const currentParent = parent.get(nodeId);
+    if (!currentParent || currentParent === nodeId) {
+      return nodeId;
+    }
+
+    const root = findRoot(currentParent);
+    parent.set(nodeId, root);
+    return root;
+  }
+
+  function union(leftId: string, rightId: string): void {
+    const leftRoot = findRoot(leftId);
+    const rightRoot = findRoot(rightId);
+
+    if (leftRoot !== rightRoot) {
+      parent.set(rightRoot, leftRoot);
+    }
+  }
+
+  for (const edge of edges) {
+    const score = clamp01(edge.score);
+    nodeStrengths.set(edge.source, (nodeStrengths.get(edge.source) ?? 0) + score);
+    nodeStrengths.set(edge.target, (nodeStrengths.get(edge.target) ?? 0) + score);
+  }
+
+  const cutoff = computeSimilarityCutoff(edges);
+  for (const edge of edges) {
+    if (clamp01(edge.score) >= cutoff) {
+      union(edge.source, edge.target);
+    }
+  }
+
+  const clusterMap = new Map<string, string[]>();
+  for (const node of nodes) {
+    const root = findRoot(node.id);
+    const members = clusterMap.get(root) ?? [];
+    members.push(node.id);
+    clusterMap.set(root, members);
+  }
+
+  type ClusterLayout = {
+    id: string;
+    members: string[];
+    targetCenter: LayoutPoint;
+    center: LayoutPoint;
+    rotation: number;
+    density: number;
+    localRadius: number;
+    extent: number;
+    strength: number;
+  };
+
+  const baseRadius =
+    Array.from(basePositions.values()).reduce((sum, point) => sum + Math.hypot(point.x, point.y), 0) /
+      Math.max(1, basePositions.size) || 1;
+
+  const clusters: ClusterLayout[] = Array.from(clusterMap.entries()).map(([root, members]) => {
+    const memberPoints = members.map((id) => basePositions.get(id) ?? { x: 0, y: 0 });
+    const memberWeights = members.map((id) => 1 + (nodeStrengths.get(id) ?? 0));
+    const totalWeight = memberWeights.reduce((sum, weight) => sum + weight, 0) || 1;
+
+    const anchor = memberPoints.reduce(
+      (accumulator, point, index) => ({
+        x: accumulator.x + point.x * memberWeights[index],
+        y: accumulator.y + point.y * memberWeights[index],
+      }),
+      { x: 0, y: 0 },
+    );
+    anchor.x /= totalWeight;
+    anchor.y /= totalWeight;
+
+    const memberAngles = members.map((id) => {
+      const point = basePositions.get(id) ?? { x: 0, y: 0 };
+      return Math.atan2(point.y, point.x);
+    });
+    const rotation = circularMean(memberAngles);
+
+    const internalEdges = edges.filter((edge) => members.includes(edge.source) && members.includes(edge.target));
+    const density =
+      internalEdges.length === 0
+        ? 0
+        : internalEdges.reduce((sum, edge) => sum + clamp01(edge.score), 0) / internalEdges.length;
+    const averageScale =
+      members.reduce((sum, id) => sum + (nodeScales.get(id) ?? 1), 0) / Math.max(1, members.length);
+    const averageSpan = SOURCE_NODE_WIDTH * averageScale;
+
+    let pairRequirement = 0;
+    for (let leftIndex = 0; leftIndex < members.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < members.length; rightIndex += 1) {
+        const leftRadius = radii.get(members[leftIndex]) ?? 0;
+        const rightRadius = radii.get(members[rightIndex]) ?? 0;
+        pairRequirement = Math.max(pairRequirement, leftRadius + rightRadius + 18);
+      }
+    }
+
+    if (members.length === 1) {
+      pairRequirement = (radii.get(members[0]) ?? 0) * 2 + 18;
+    }
+
+    const clusterCenterRadius =
+      baseRadius * (0.96 + density * 0.18 + Math.max(0, members.length - 1) * 0.035) + averageSpan * 0.045;
+    const directionalCenter = {
+      x: Math.cos(rotation) * clusterCenterRadius,
+      y: Math.sin(rotation) * clusterCenterRadius,
+    };
+    const targetCenter = {
+      x: anchor.x * 0.38 + directionalCenter.x * 0.62,
+      y: anchor.y * 0.38 + directionalCenter.y * 0.62,
+    };
+
+    const minPolygonRadius =
+      members.length <= 1
+        ? 0
+        : pairRequirement / (2 * Math.sin(Math.PI / members.length));
+    const localRadius =
+      members.length <= 1
+        ? 0
+        : Math.max(
+            minPolygonRadius * 1.04,
+            pairRequirement * 0.54,
+            82 + members.length * 16 + (1 - density) * 28,
+          );
+    const extent =
+      members.length <= 1
+        ? pairRequirement * 0.5
+        : localRadius + Math.max(...members.map((id) => radii.get(id) ?? 0)) + 20;
+    const strength =
+      internalEdges.reduce((sum, edge) => sum + clamp01(edge.score), 0) / Math.max(1, internalEdges.length);
+
+    return {
+      id: root,
+      members,
+      targetCenter,
+      center: { x: targetCenter.x, y: targetCenter.y },
+      rotation,
+      density,
+      localRadius,
+      extent,
+      strength,
+    };
+  });
+
+  clusters.sort((left, right) => {
+    if (right.members.length !== left.members.length) {
+      return right.members.length - left.members.length;
+    }
+
+    return right.strength - left.strength;
+  });
+
+  const clusterIterations = Math.max(10, Math.min(28, Math.round(nodes.length * 3.5)));
+  const clusterPull = 0.05;
+  const clusterGap = 36;
+
+  function fallbackDirection(leftId: string, rightId: string): LayoutPoint {
+    const seed = `${leftId}::${rightId}`;
+    let hash = 0;
+
+    for (let index = 0; index < seed.length; index += 1) {
+      hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+    }
+
+    const angle = (hash % 360) * (Math.PI / 180);
+    return {
+      x: Math.cos(angle) || 1,
+      y: Math.sin(angle),
+    };
+  }
+
+  for (let iteration = 0; iteration < clusterIterations; iteration += 1) {
+    for (let leftIndex = 0; leftIndex < clusters.length; leftIndex += 1) {
+      const leftCluster = clusters[leftIndex];
+
+      for (let rightIndex = leftIndex + 1; rightIndex < clusters.length; rightIndex += 1) {
+        const rightCluster = clusters[rightIndex];
+        const dx = rightCluster.center.x - leftCluster.center.x;
+        const dy = rightCluster.center.y - leftCluster.center.y;
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        const requiredDistance = leftCluster.extent + rightCluster.extent + clusterGap;
+
+        if (distance >= requiredDistance) {
+          continue;
+        }
+
+        const overlap = requiredDistance - distance;
+        const direction =
+          distance > 0.001
+            ? { x: dx / distance, y: dy / distance }
+            : fallbackDirection(leftCluster.id, rightCluster.id);
+        const leftWeight = Math.max(1, leftCluster.extent);
+        const rightWeight = Math.max(1, rightCluster.extent);
+        const totalWeight = leftWeight + rightWeight;
+        const leftShift = overlap * (rightWeight / totalWeight);
+        const rightShift = overlap * (leftWeight / totalWeight);
+
+        leftCluster.center.x -= direction.x * leftShift;
+        leftCluster.center.y -= direction.y * leftShift;
+        rightCluster.center.x += direction.x * rightShift;
+        rightCluster.center.y += direction.y * rightShift;
+      }
+    }
+
+    for (const cluster of clusters) {
+      cluster.center.x += (cluster.targetCenter.x - cluster.center.x) * clusterPull;
+      cluster.center.y += (cluster.targetCenter.y - cluster.center.y) * clusterPull;
+    }
+
+    const centerX = clusters.reduce((sum, cluster) => sum + cluster.center.x, 0) / Math.max(1, clusters.length);
+    const centerY = clusters.reduce((sum, cluster) => sum + cluster.center.y, 0) / Math.max(1, clusters.length);
+
+    for (const cluster of clusters) {
+      cluster.center.x -= centerX;
+      cluster.center.y -= centerY;
+    }
+  }
+
+  const positions = new Map<string, LayoutPoint>();
+  const regularRotation = Math.PI * (3 - Math.sqrt(5));
+
+  for (const cluster of clusters) {
+    const sortedMembers = [...cluster.members].sort((leftId, rightId) => {
+      const leftStrength = nodeStrengths.get(leftId) ?? 0;
+      const rightStrength = nodeStrengths.get(rightId) ?? 0;
+      if (rightStrength !== leftStrength) {
+        return rightStrength - leftStrength;
+      }
+
+      return leftId.localeCompare(rightId);
+    });
+
+    if (sortedMembers.length === 1) {
+      positions.set(sortedMembers[0], {
+        x: cluster.center.x,
+        y: cluster.center.y,
+      });
+      continue;
+    }
+
+    const baseRotation = cluster.rotation + regularRotation * 0.12;
+    const memberCount = sortedMembers.length;
+
+    sortedMembers.forEach((memberId, index) => {
+      const angle = baseRotation + (Math.PI * 2 * index) / memberCount;
+      positions.set(memberId, {
+        x: cluster.center.x + Math.cos(angle) * cluster.localRadius,
+        y: cluster.center.y + Math.sin(angle) * cluster.localRadius,
+      });
+    });
+  }
+
+  const recenterX = Array.from(positions.values()).reduce((sum, point) => sum + point.x, 0) / Math.max(1, positions.size);
+  const recenterY = Array.from(positions.values()).reduce((sum, point) => sum + point.y, 0) / Math.max(1, positions.size);
+
+  for (const point of positions.values()) {
+    point.x -= recenterX;
+    point.y -= recenterY;
+  }
+
+  return positions;
 }
 
 function scaleLayoutPosition(
@@ -415,6 +742,27 @@ export function SimilarityGraphPage({
     };
   }, [graphResponse]);
 
+  const nodeScales = useMemo(() => {
+    if (!graphResponse) {
+      return new Map<string, number>();
+    }
+
+    const scales = new Map<string, number>();
+    for (const node of graphResponse.nodes) {
+      scales.set(node.id, getSimilarityNodeScale(node.metadata.total_keys, keyRange.min, keyRange.max));
+    }
+
+    return scales;
+  }, [graphResponse, keyRange.max, keyRange.min]);
+
+  const clusteredPositions = useMemo(() => {
+    if (!graphResponse) {
+      return new Map<string, LayoutPoint>();
+    }
+
+    return buildClusteredSimilarityPositions(graphResponse.nodes, graphResponse.edges, nodeScales);
+  }, [graphResponse, nodeScales]);
+
   const flowNodes: SimilarityNodeType[] = useMemo(() => {
     if (!graphResponse) {
       return [];
@@ -424,12 +772,13 @@ export function SimilarityGraphPage({
       const source = sources[node.metadata.index];
       const strength = nodeStrengths.get(node.id)?.strongest ?? 0;
       const neighborCount = nodeStrengths.get(node.id)?.count ?? 0;
-      const nodeScale = getSimilarityNodeScale(node.metadata.total_keys, keyRange.min, keyRange.max);
+      const nodeScale = nodeScales.get(node.id) ?? 1;
+      const clusteredPosition = clusteredPositions.get(node.id) ?? node.position;
 
       return {
         id: node.id,
         type: 'similarityNode',
-        position: scaleLayoutPosition(node.position, layoutScale, nodeScale),
+        position: scaleLayoutPosition(clusteredPosition, layoutScale, nodeScale),
         data: {
           label: node.label,
           description: node.description,
@@ -447,7 +796,7 @@ export function SimilarityGraphPage({
         selectable: true,
       };
     });
-  }, [graphResponse, keyRange.max, keyRange.min, layoutScale, nodeStrengths, sources]);
+  }, [clusteredPositions, graphResponse, layoutScale, nodeScales, nodeStrengths, sources]);
 
   const flowEdges: SimilarityEdgeType[] = useMemo(() => {
     return visibleEdges.map((edge) => ({
