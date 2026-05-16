@@ -805,7 +805,6 @@ function SimilarityNode({ data, selected }: NodeProps<SimilarityNodeType>) {
           <div className="similarity-node__title">{data.label}</div>
           <div className="similarity-node__subtitle">{data.variantLabel}</div>
         </div>
-        <span className="similarity-node__badge">{formatPercent(data.strength)}</span>
       </div>
 
       <p className="similarity-node__summary">{data.note}</p>
@@ -813,11 +812,6 @@ function SimilarityNode({ data, selected }: NodeProps<SimilarityNodeType>) {
       <div className="similarity-node__facts">
         <span>{data.metadata.total_keys} keys</span>
         <span>{data.metadata.structural_tokens} tokens</span>
-        <span>{data.neighborCount} links</span>
-      </div>
-
-      <div className="similarity-node__meter">
-        <span style={{ width: `${Math.round(data.strength * 100)}%` }} />
       </div>
 
       <Handle type="source" position={Position.Right} className="similarity-node__handle" />
