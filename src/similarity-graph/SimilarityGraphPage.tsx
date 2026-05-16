@@ -4,6 +4,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
   Background,
@@ -22,6 +24,8 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import { buildGenschemaUrl } from '../lib/genschema';
+import { InspectorShell } from '../components/InspectorShell';
+import { readIntegerCookie, writeCookie } from '../lib/cookies';
 import type { GraphDocument } from '../shared/graph';
 import { createNodeRawJson, normalizeText } from '../shared/graph';
 
@@ -29,7 +33,6 @@ interface SimilarityGraphPageProps {
   graph: GraphDocument | null;
   busy: boolean;
   loadError: string | null;
-  onGoToGraph: () => void;
   onNavigateSchemaNode: (nodeUid: string, jsonIndex?: number | null) => void;
 }
 
@@ -150,6 +153,13 @@ interface SimilarityHandlePairChoice {
 const GRAPH_DENSITY_THRESHOLD = 0.2;
 const DEFAULT_LAYOUT_SCALE = 1;
 const DEFAULT_FOCUS_ZOOM = 1.08;
+const DETAILS_PANEL_WIDTH_COOKIE = 'site-reverse-ide-similarity-details-width';
+const DETAILS_PANEL_DEFAULT_WIDTH = 340;
+const DETAILS_PANEL_MIN_WIDTH = 260;
+const DETAILS_PANEL_MAX_WIDTH = 680;
+const DETAILS_PANEL_MIN_CANVAS_WIDTH = 420;
+const DETAILS_PANEL_KEY_STEP = 24;
+const DETAILS_PANEL_KEY_STEP_FAST = 72;
 const SOURCE_NODE_WIDTH = 220;
 const SOURCE_NODE_HEIGHT = 110;
 const MIN_NODE_SCALE = 0.88;
@@ -304,6 +314,27 @@ function buildSimilaritySources(graph: GraphDocument | null): SimilaritySource[]
 
 function buildSimilarityUrl(): string {
   return buildGenschemaUrl('/api/genschema/similarity-graph');
+}
+
+function getInitialDetailsWidth(): number {
+  const storedWidth = readIntegerCookie(DETAILS_PANEL_WIDTH_COOKIE);
+  const viewportWidth = typeof window === 'undefined' ? DETAILS_PANEL_DEFAULT_WIDTH : window.innerWidth;
+  const fallbackWidth = storedWidth ?? DETAILS_PANEL_DEFAULT_WIDTH;
+
+  return clampWidthForViewport(fallbackWidth, viewportWidth);
+}
+
+function clampWidthForViewport(value: number, viewportWidth: number): number {
+  const maxWidth = Math.max(
+    DETAILS_PANEL_MIN_WIDTH,
+    Math.min(DETAILS_PANEL_MAX_WIDTH, viewportWidth - DETAILS_PANEL_MIN_CANVAS_WIDTH),
+  );
+
+  return Math.round(Math.max(DETAILS_PANEL_MIN_WIDTH, Math.min(maxWidth, value)));
+}
+
+function getKeyboardResizeStep(event: ReactKeyboardEvent<HTMLDivElement>): number {
+  return event.shiftKey ? DETAILS_PANEL_KEY_STEP_FAST : DETAILS_PANEL_KEY_STEP;
 }
 
 function mapNodeStrengths(edges: SimilarityGraphEdgePayload[]): Map<string, { count: number; strongest: number }> {
@@ -987,7 +1018,6 @@ export function SimilarityGraphPage({
   graph,
   busy,
   loadError,
-  onGoToGraph,
   onNavigateSchemaNode,
 }: SimilarityGraphPageProps) {
   const [graphResponse, setGraphResponse] = useState<SimilarityGraphResponse | null>(null);
@@ -995,11 +1025,26 @@ export function SimilarityGraphPage({
   const [graphError, setGraphError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [detailsWidth, setDetailsWidth] = useState<number>(() => getInitialDetailsWidth());
+  const [isResizing, setIsResizing] = useState(false);
   const reactFlowRef = useRef<ReactFlowInstance<SimilarityNodeType, SimilarityEdgeType> | null>(null);
   const requestTokenRef = useRef(0);
+  const resizeSessionRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const threshold = GRAPH_DENSITY_THRESHOLD;
 
   const sources = useMemo(() => buildSimilaritySources(graph), [graph]);
+  const shellStyle = useMemo<CSSProperties>(
+    () =>
+      ({
+        '--schema-viewer-details-width': `${detailsWidth}px`,
+      }) as CSSProperties,
+    [detailsWidth],
+  );
   const requestPayload = useMemo(
     () => ({
       documents: sources.map((source) => ({
@@ -1014,6 +1059,129 @@ export function SimilarityGraphPage({
     }),
     [sources],
   );
+
+  useEffect(() => {
+    writeCookie(DETAILS_PANEL_WIDTH_COOKIE, String(detailsWidth), {
+      maxAgeSeconds: 60 * 60 * 24 * 365,
+      path: '/',
+      sameSite: 'Lax',
+    });
+  }, [detailsWidth]);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      setDetailsWidth((current) => clampWidthForViewport(current, window.innerWidth));
+    };
+
+    handleWindowResize();
+    window.addEventListener('resize', handleWindowResize);
+
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, []);
+
+  useEffect(
+    () => () => {
+      resizeCleanupRef.current?.();
+      resizeCleanupRef.current = null;
+    },
+    [],
+  );
+
+  function setAndPersistDetailsWidth(nextWidth: number) {
+    const viewportWidth = typeof window === 'undefined' ? Number.POSITIVE_INFINITY : window.innerWidth;
+    const nextValue = clampWidthForViewport(nextWidth, viewportWidth);
+    setDetailsWidth(nextValue);
+  }
+
+  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const session = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: detailsWidth,
+    };
+
+    resizeSessionRef.current = session;
+    setIsResizing(true);
+
+    const stopResize = () => {
+      if (resizeSessionRef.current?.pointerId !== session.pointerId) {
+        return;
+      }
+
+      resizeSessionRef.current = null;
+      setIsResizing(false);
+      resizeCleanupRef.current?.();
+      resizeCleanupRef.current = null;
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== session.pointerId) {
+        return;
+      }
+
+      const nextWidth = session.startWidth + (session.startX - moveEvent.clientX);
+      setAndPersistDetailsWidth(nextWidth);
+    };
+
+    const handlePointerUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== session.pointerId) {
+        return;
+      }
+
+      stopResize();
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    resizeCleanupRef.current = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+  }
+
+  function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const step = getKeyboardResizeStep(event);
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setAndPersistDetailsWidth(detailsWidth - step);
+      return;
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setAndPersistDetailsWidth(detailsWidth + step);
+      return;
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault();
+      setAndPersistDetailsWidth(DETAILS_PANEL_MIN_WIDTH);
+      return;
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault();
+      const viewportWidth = typeof window === 'undefined' ? Number.POSITIVE_INFINITY : window.innerWidth;
+      const maxWidth = Math.max(
+        DETAILS_PANEL_MIN_WIDTH,
+        Math.min(DETAILS_PANEL_MAX_WIDTH, viewportWidth - DETAILS_PANEL_MIN_CANVAS_WIDTH),
+      );
+      setAndPersistDetailsWidth(maxWidth);
+    }
+  }
 
   useEffect(() => {
     if (!graph) {
@@ -1255,16 +1423,6 @@ export function SimilarityGraphPage({
     return visibleEdges[0];
   }, [visibleEdges]);
 
-  const averageScore = useMemo(() => {
-    if (visibleEdges.length === 0) {
-      return 0;
-    }
-
-    return visibleEdges.reduce((sum, edge) => sum + edge.score, 0) / visibleEdges.length;
-  }, [visibleEdges]);
-
-  const activeEdge = selectedEdge ?? strongestEdge;
-
   function focusFlowNode(nodeId: string) {
     const node = flowNodes.find((current) => current.id === nodeId);
     if (!node || !reactFlowRef.current) {
@@ -1297,6 +1455,11 @@ export function SimilarityGraphPage({
     });
   }
 
+  function handleInspectorClose() {
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+  }
+
   const selectedNodeLinks = useMemo(() => {
     if (!selectedNode) {
       return [];
@@ -1314,8 +1477,11 @@ export function SimilarityGraphPage({
   }, [flowNodes, selectedNode, selectedNodeConnections]);
 
   return (
-    <div className="similarity-shell">
-      <main className="similarity-shell__canvas">
+    <div
+      className={`schema-viewer-shell${isResizing ? ' schema-viewer-shell--resizing' : ''}`}
+      style={shellStyle}
+    >
+      <main className="schema-viewer-shell__canvas similarity-shell__canvas">
         {graphBusy ? <div className="similarity-shell__loading-bar" /> : null}
 
         {graphResponse ? (
@@ -1373,17 +1539,44 @@ export function SimilarityGraphPage({
         )}
       </main>
 
-      <aside className="similarity-shell__panel similarity-shell__panel--details">
-        <div className="schema-viewer__eyebrow">Inspector</div>
-        <h2 className="schema-viewer__title schema-viewer__title--compact">Крепость связей</h2>
+      <div
+        className={`schema-viewer-shell__resizer${isResizing ? ' is-resizing' : ''}`}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize inspector panel"
+        aria-valuemin={DETAILS_PANEL_MIN_WIDTH}
+        aria-valuemax={Math.max(
+          DETAILS_PANEL_MIN_WIDTH,
+          Math.min(
+            DETAILS_PANEL_MAX_WIDTH,
+            (typeof window === 'undefined' ? DETAILS_PANEL_MAX_WIDTH : window.innerWidth) -
+              DETAILS_PANEL_MIN_CANVAS_WIDTH,
+          ),
+        )}
+        aria-valuenow={detailsWidth}
+        tabIndex={0}
+        onKeyDown={handleResizeKeyDown}
+        onPointerDown={handleResizePointerDown}
+      />
 
+      <InspectorShell
+        eyebrow="Inspector"
+        title="Крепость связей"
+        badge={
+          graphResponse
+            ? formatPercent(selectedEdge?.score ?? selectedNode?.data.strength ?? strongestEdge?.score ?? threshold)
+            : null
+        }
+        onAction={selectedEdge || selectedNode ? handleInspectorClose : undefined}
+        actionLabel="Close"
+      >
         {!graphResponse ? (
           <div className="empty-inspector">
             <p>Здесь появятся детали выбранной пары после расчета графа.</p>
           </div>
         ) : selectedEdge ? (
-          <div className="similarity-shell__inspector">
-            <div className="similarity-shell__inspector-card">
+          <>
+            <div className="schema-viewer__section">
               <div className="similarity-shell__pair">
                 <button type="button" onClick={() => focusFlowNode(selectedEdge.source)}>
                   {selectedEdge.source}
@@ -1402,7 +1595,12 @@ export function SimilarityGraphPage({
               <div className="similarity-shell__meter">
                 <span style={{ width: `${selectedEdge.percentage}%` }} />
               </div>
+            </div>
 
+            <div className="schema-viewer__section">
+              <div className="schema-viewer__section-head">
+                <span className="schema-viewer__label">Детали</span>
+              </div>
               <dl className="similarity-shell__facts">
                 <div>
                   <dt>Структура</dt>
@@ -1426,17 +1624,20 @@ export function SimilarityGraphPage({
                 </div>
               </dl>
             </div>
-          </div>
+          </>
         ) : selectedNode ? (
-          <div className="similarity-shell__inspector">
-            <div className="similarity-shell__inspector-card">
+          <>
+            <div className="schema-viewer__section">
+              <div className="schema-viewer__section-head">
+                <span className="schema-viewer__label">Selected</span>
+              </div>
+
               <div className="similarity-shell__source-header">
                 <div>
-                  <div className="schema-viewer__eyebrow">Selected</div>
                   <h3 className="similarity-shell__source-heading">{selectedSource?.label ?? selectedNode.data.label}</h3>
                   <p className="schema-viewer__hint">{selectedSource?.note ?? selectedNode.data.note}</p>
                 </div>
-                <span className="badge">{formatPercent(selectedNode.data.strength)}</span>
+                <span className="schema-viewer__badge">{formatPercent(selectedNode.data.strength)}</span>
               </div>
 
               <div className="similarity-shell__meter">
@@ -1463,7 +1664,7 @@ export function SimilarityGraphPage({
               </dl>
             </div>
 
-            <div className="similarity-shell__inspector-card">
+            <div className="schema-viewer__section">
               <div className="schema-viewer__section-head">
                 <span className="schema-viewer__label">Лучшие связи</span>
               </div>
@@ -1491,10 +1692,10 @@ export function SimilarityGraphPage({
                 </div>
               )}
             </div>
-          </div>
+          </>
         ) : (
-          <div className="similarity-shell__inspector">
-            <div className="similarity-shell__inspector-card">
+          <>
+            <div className="schema-viewer__section">
               <div className="schema-viewer__section-head">
                 <span className="schema-viewer__label">Справка</span>
               </div>
@@ -1512,7 +1713,7 @@ export function SimilarityGraphPage({
               ) : null}
             </div>
 
-            <div className="similarity-shell__inspector-card">
+            <div className="schema-viewer__section">
               <div className="schema-viewer__section-head">
                 <span className="schema-viewer__label">Легенда</span>
               </div>
@@ -1522,9 +1723,9 @@ export function SimilarityGraphPage({
                 <li>Клик по ноде показывает ее лучшие соседства.</li>
               </ul>
             </div>
-          </div>
+          </>
         )}
-      </aside>
+      </InspectorShell>
     </div>
   );
 }

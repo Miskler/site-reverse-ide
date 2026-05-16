@@ -1661,32 +1661,6 @@ button.is-active {
   color: var(--muted);
 }
 
-.similarity-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--bg);
-}
-
-.similarity-shell__panel {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-width: 0;
-  min-height: 0;
-  padding: 1rem;
-  overflow: auto;
-  background: var(--sidebar);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.similarity-shell__panel--details {
-  border-right: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
-}
-
 .similarity-shell__stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1870,21 +1844,6 @@ button.is-active {
   height: 100%;
   padding: 2rem;
   color: var(--muted);
-}
-
-.similarity-shell__inspector {
-  display: grid;
-  gap: 0.8rem;
-}
-
-.similarity-shell__inspector-card {
-  display: grid;
-  gap: 0.9rem;
-  padding: 0.95rem;
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: var(--shadow-soft);
 }
 
 .similarity-shell__source-header {
@@ -2908,17 +2867,6 @@ button.is-active {
   .root-app-shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .similarity-shell {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(46vh, 1fr) auto;
-    overflow: auto;
-  }
-
-  .similarity-shell__panel--details {
-    border-left: 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .similarity-shell__stats,

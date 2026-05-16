@@ -129,11 +129,10 @@ export function RootApp() {
               onNavigateSchemaNode={navigateSchemaNode}
             />
           ) : route.kind === 'similarity' ? (
-            <SimilarityGraphPage
+          <SimilarityGraphPage
               graph={graphDocument}
               busy={graphBusy}
               loadError={graphLoadError}
-              onGoToGraph={backToGraph}
               onNavigateSchemaNode={navigateSchemaNode}
             />
           ) : (

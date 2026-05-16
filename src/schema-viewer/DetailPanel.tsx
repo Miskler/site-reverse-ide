@@ -5,6 +5,7 @@ import {
   JSON_POINTER_EXTENSIONS,
 } from '../lib/json-editor';
 import { appToast } from '../lib/app-toast';
+import { InspectorShell } from '../components/InspectorShell';
 import type { SelectionDetails } from './schema-types';
 import { formatJsonPointerForCode } from './pointer-format';
 
@@ -133,13 +134,11 @@ export function DetailPanel({
 
   if (!currentDetails) {
     return (
-      <aside className="schema-viewer__panel schema-viewer__panel--details">
-        <div className="schema-viewer__eyebrow">Inspector</div>
-        <h2 className="schema-viewer__title schema-viewer__title--compact">Selection</h2>
+      <InspectorShell eyebrow="Inspector" title="Selection">
         <p className="schema-viewer__hint">
           Select a node or field in the canvas to inspect its schema fragment.
         </p>
-      </aside>
+      </InspectorShell>
     );
   }
 
@@ -164,20 +163,13 @@ export function DetailPanel({
   }
 
   return (
-    <aside className="schema-viewer__panel schema-viewer__panel--details">
-      <div className="schema-viewer__detail-header">
-        <div>
-          <div className="schema-viewer__eyebrow">Inspector</div>
-          <div className="schema-viewer__detail-title-row">
-            <h2 className="schema-viewer__title schema-viewer__title--compact">{selectionDetails.heading}</h2>
-            <span className="schema-viewer__badge">{selectionDetails.badge}</span>
-          </div>
-        </div>
-        <button type="button" onClick={onClose}>
-          Close
-        </button>
-      </div>
-
+    <InspectorShell
+      eyebrow="Inspector"
+      title={selectionDetails.heading}
+      badge={selectionDetails.badge}
+      onAction={onClose}
+      actionLabel="Close"
+    >
       {selectionDetails.description ? (
         <p className="schema-viewer__description">{selectionDetails.description}</p>
       ) : null}
@@ -285,6 +277,6 @@ export function DetailPanel({
           />
         </div>
       </div>
-    </aside>
+    </InspectorShell>
   );
 }
