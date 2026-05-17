@@ -20,10 +20,10 @@ const ENUM_WIDTH = 190;
 const ENUM_MAX_WIDTH = 266;
 const REF_WIDTH = 240;
 const ENUM_HEADER_HEIGHT = 66;
-const ENUM_LIST_VERTICAL_PADDING = 32;
+const ENUM_LIST_VERTICAL_PADDING = 19;
 const ENUM_PILL_VERTICAL_CHROME = 18;
-const ENUM_PILL_GAP = 10;
-const ENUM_PILL_LINE_HEIGHT = 20;
+const ENUM_PILL_GAP = 8;
+const ENUM_PILL_LINE_HEIGHT = 19;
 const ENUM_AVERAGE_CHAR_WIDTH = 8;
 const ENUM_HORIZONTAL_PADDING = 52;
 
@@ -686,7 +686,7 @@ function measureNode(
 
       return {
         width,
-        height: Math.max(172, ENUM_HEADER_HEIGHT + measureEnumContentHeight(displayNode)),
+        height: ENUM_HEADER_HEIGHT + measureEnumContentHeight(displayNode),
       };
     }
 
