@@ -1,6 +1,7 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { createTargetHandleId } from './handle-ids';
 import type { SchemaGraphModel } from './schema-types';
+import { shouldRenderNode } from './node-presentation';
 
 export interface NodePositions {
   [nodeId: string]: {
@@ -13,7 +14,9 @@ const elk = new ELK();
 const PORT_SIZE = 10;
 
 export async function layoutSchemaGraph(model: SchemaGraphModel): Promise<NodePositions> {
-  const visibleNodes = model.nodes.filter((node) => !node.isEmbedded);
+  const visibleNodes = model.nodes.filter(
+    (node) => !node.isEmbedded && shouldRenderNode(model.nodeMap, node),
+  );
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
 
   const graph = await elk.layout({
@@ -58,7 +61,7 @@ export async function layoutSchemaGraph(model: SchemaGraphModel): Promise<NodePo
         ? sourceNode.ownerNodeId
         : sourceNode.id;
 
-      if (!visibleNodeIds.has(renderSourceNodeId)) {
+      if (!visibleNodeIds.has(renderSourceNodeId) || !visibleNodeIds.has(targetNode.id)) {
         return [];
       }
 
@@ -86,7 +89,7 @@ export async function layoutSchemaGraph(model: SchemaGraphModel): Promise<NodePo
 
 function collectPortsForOwner(model: SchemaGraphModel, ownerNodeId: string) {
   return model.nodes
-    .filter((node) => node.ownerNodeId === ownerNodeId)
+    .filter((node) => node.ownerNodeId === ownerNodeId && shouldRenderNode(model.nodeMap, node))
     .flatMap((node) =>
       node.rows
         .filter((row) => row.handleId)

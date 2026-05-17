@@ -38,6 +38,27 @@ export function getPromotedEmbeddedChild(
   return childNode;
 }
 
+export function shouldRenderNode(
+  nodeMap: Record<string, SchemaGraphNode> | Map<string, SchemaGraphNode>,
+  schemaNode: SchemaGraphNode,
+): boolean {
+  const displayNode = getPresentationNode(nodeMap, schemaNode);
+
+  if (displayNode.kind === 'enum') {
+    return true;
+  }
+
+  if (displayNode.rows.length > 0) {
+    return true;
+  }
+
+  return hasSpecificSubtitle(displayNode.subtitle);
+}
+
+function hasSpecificSubtitle(subtitle: string): boolean {
+  return subtitle.includes(':') || subtitle.includes('|');
+}
+
 function readNode(
   nodeMap: Record<string, SchemaGraphNode> | Map<string, SchemaGraphNode>,
   nodeId: string,

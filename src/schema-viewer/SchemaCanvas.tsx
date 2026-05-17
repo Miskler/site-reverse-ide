@@ -5,7 +5,7 @@ import {
 } from '@xyflow/react';
 import { useEffect, useMemo, useRef } from 'react';
 import { createTargetHandleId } from './handle-ids';
-import { getPresentationNode } from './node-presentation';
+import { getPresentationNode, shouldRenderNode } from './node-presentation';
 import type { NodePositions } from './layout';
 import type { SchemaGraphModel, SchemaSelection } from './schema-types';
 import { SchemaNode, type SchemaNodeType } from './SchemaNode';
@@ -45,8 +45,13 @@ export function SchemaCanvas({
   const reactFlowRef = useRef<ReactFlowInstance<SchemaNodeType, SchemaEdgeType> | null>(null);
   const initialFitPendingRef = useRef(true);
   const visibleNodeIds = useMemo(
-    () => new Set(model.nodes.filter((node) => !node.isEmbedded).map((node) => node.id)),
-    [model.nodes],
+    () =>
+      new Set(
+        model.nodes
+          .filter((node) => !node.isEmbedded && shouldRenderNode(model.nodeMap, node))
+          .map((node) => node.id),
+      ),
+    [model.nodeMap, model.nodes],
   );
 
   function fitCanvas(instance: ReactFlowInstance<SchemaNodeType, SchemaEdgeType>) {
@@ -100,7 +105,7 @@ export function SchemaCanvas({
   const nodes: SchemaNodeType[] = useMemo(
     () =>
       model.nodes
-        .filter((node) => !node.isEmbedded)
+        .filter((node) => !node.isEmbedded && shouldRenderNode(model.nodeMap, node))
         .map((node) => {
           const presentationNode = getPresentationNode(model.nodeMap, node);
 
@@ -145,7 +150,7 @@ export function SchemaCanvas({
           ? sourceNode.ownerNodeId
           : sourceNode.id;
 
-        if (!visibleNodeIds.has(renderSourceNodeId)) {
+        if (!visibleNodeIds.has(renderSourceNodeId) || !visibleNodeIds.has(targetNode.id)) {
           return [];
         }
 
