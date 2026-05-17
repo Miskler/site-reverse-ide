@@ -533,9 +533,14 @@ function getCombinator(schema: JsonSchema): { keyword: string; variants: JsonSch
 
 function createTypeLabel(schema: JsonSchema, hasChildNode: boolean): string {
   let label = 'schema';
+  const isArraySchema = looksLikeArray(schema);
 
   if (schema.enum || Object.prototype.hasOwnProperty.call(schema, 'const')) {
     label = 'enum';
+    const enumType = getEnumValueType(schema);
+    if (enumType) {
+      label = `${label}:${enumType}`;
+    }
   } else if (schema.anyOf) {
     label = 'anyOf';
   } else if (schema.oneOf) {
@@ -550,6 +555,13 @@ function createTypeLabel(schema: JsonSchema, hasChildNode: boolean): string {
     label = 'array';
   }
 
+  if (label === 'array' && isArraySchema) {
+    const arrayItemType = getArrayItemTypeLabel(schema);
+    if (arrayItemType) {
+      label = `${label}:${arrayItemType}`;
+    }
+  }
+
   if (typeof schema.format === 'string') {
     label = `${label}:${schema.format}`;
   }
@@ -561,6 +573,88 @@ function createTypeLabel(schema: JsonSchema, hasChildNode: boolean): string {
   }
 
   return label;
+}
+
+function getArrayItemTypeLabel(schema: JsonSchema): string | null {
+  if (!schema.items || schema.items === true || Array.isArray(schema.items)) {
+    return null;
+  }
+
+  if ((schema.prefixItems?.length ?? 0) > 0) {
+    return null;
+  }
+
+  if (typeof schema.items !== 'object') {
+    return null;
+  }
+
+  return createTypeLabel(schema.items as JsonSchema, false);
+}
+
+function getEnumValueType(schema: JsonSchema): string | null {
+  const explicitType = getDeclaredSchemaType(schema);
+  if (explicitType) {
+    return explicitType;
+  }
+
+  const values = schema.enum ?? (Object.prototype.hasOwnProperty.call(schema, 'const') ? [schema.const] : []);
+  const inferredTypes = new Set<string>();
+
+  for (const value of values) {
+    const inferredType = inferJsonValueType(value);
+    if (inferredType) {
+      inferredTypes.add(inferredType);
+    }
+  }
+
+  if (inferredTypes.size === 1) {
+    return Array.from(inferredTypes)[0];
+  }
+
+  return null;
+}
+
+function getDeclaredSchemaType(schema: JsonSchema): string | null {
+  if (typeof schema.type === 'string') {
+    return schema.type;
+  }
+
+  if (Array.isArray(schema.type)) {
+    const types = schema.type.filter((item): item is string => typeof item === 'string' && item.length > 0);
+    if (types.length > 0) {
+      return types.join(' | ');
+    }
+  }
+
+  return null;
+}
+
+function inferJsonValueType(value: JsonValue | undefined): string | null {
+  if (typeof value === 'string') {
+    return 'string';
+  }
+
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? 'integer' : 'number';
+  }
+
+  if (typeof value === 'boolean') {
+    return 'boolean';
+  }
+
+  if (value === null) {
+    return 'null';
+  }
+
+  if (Array.isArray(value)) {
+    return 'array';
+  }
+
+  if (value && typeof value === 'object') {
+    return 'object';
+  }
+
+  return null;
 }
 
 function createDetailLines(schema: JsonSchema): string[] {
@@ -832,7 +926,7 @@ function createSubtitle(schema: JsonSchema, kind: SchemaNodeKind): string {
   }
 
   if (kind === 'array') {
-    return 'array';
+    return createTypeLabel(schema, false);
   }
 
   if (kind === 'combinator') {
@@ -840,7 +934,7 @@ function createSubtitle(schema: JsonSchema, kind: SchemaNodeKind): string {
   }
 
   if (kind === 'enum') {
-    return 'enum';
+    return createTypeLabel(schema, false);
   }
 
   if (kind === 'ref-target') {
