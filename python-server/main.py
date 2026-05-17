@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import math
 import os
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.metadata import PackageNotFoundError, version as package_version
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlparse
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from genschema import Converter, PseudoArrayHandler
 from genschema.comparators import (
@@ -48,8 +50,47 @@ GRAPH_COMPARATOR_SPECS: list[dict[str, Any]] = [
     {"name": "delete", "attribute": "isPseudoArray"},
 ]
 
+DISPLAY_SCHEMA_DELETE_COMPARATOR_SPECS: list[dict[str, Any]] = [
+    {"name": "delete", "attribute": "j2sElementTrigger"},
+    {"name": "delete", "attribute": "j2sEnumRejected"},
+    {"name": "delete", "attribute": "isPseudoArray"},
+]
+
 class ApiError(Exception):
     pass
+
+
+app = FastAPI(title="Genschema REST API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.exception_handler(ApiError)
+async def handle_api_error(_: Request, exc: ApiError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def handle_http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    message = exc.detail
+    if exc.status_code == 404 and message == "Not Found":
+        message = "Not found"
+    return JSONResponse(status_code=exc.status_code, content={"error": str(message)})
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected_error(_: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Failed to process genschema request",
+            "detail": str(exc),
+        },
+    )
 
 
 @dataclass(slots=True)
@@ -174,6 +215,52 @@ def ensure_allowed_keys(value: dict[str, Any], allowed: set[str], field_name: st
         raise ApiError(f"Unexpected fields in {field_name}: {extras}")
 
 
+def resolve_comparator_specs(
+    payload: dict[str, Any],
+    default_specs: list[dict[str, Any]] | None = None,
+) -> list[Any]:
+    default_specs = [] if default_specs is None else default_specs
+    use_default_comparators = normalize_bool(payload.get("use_default_comparators"), True)
+    raw_comparators = payload.get("comparators")
+
+    if raw_comparators is None:
+        return list(default_specs) if use_default_comparators else []
+    if not isinstance(raw_comparators, list):
+        raise ApiError("comparators must be an array")
+    return list(raw_comparators)
+
+
+def comparator_spec_name(spec: Any) -> str:
+    if isinstance(spec, str):
+        return spec.strip().lower()
+    if is_record(spec):
+        return normalize_text(spec.get("name"), "").lower()
+    return ""
+
+
+def comparator_spec_attribute(spec: Any) -> str:
+    if not is_record(spec):
+        return ""
+    return normalize_text(spec.get("attribute"), "")
+
+
+def extend_display_schema_comparator_specs(specs: list[Any]) -> list[Any]:
+    result = list(specs)
+    existing_delete_attributes = {
+        comparator_spec_attribute(spec)
+        for spec in result
+        if comparator_spec_name(spec) in {"delete", "delete_element"}
+    }
+
+    for spec in DISPLAY_SCHEMA_DELETE_COMPARATOR_SPECS:
+        attribute = comparator_spec_attribute(spec)
+        if attribute not in existing_delete_attributes:
+            result.append(spec)
+            existing_delete_attributes.add(attribute)
+
+    return result
+
+
 def parse_input_items(payload: dict[str, Any]) -> list[ParsedInputItem]:
     raw_inputs = payload.get("inputs")
     if raw_inputs is None:
@@ -289,17 +376,9 @@ def register_comparators(
     payload: dict[str, Any],
     default_specs: list[dict[str, Any]] | None = None,
 ) -> list[str]:
-    default_specs = [] if default_specs is None else default_specs
-    use_default_comparators = normalize_bool(payload.get("use_default_comparators"), True)
-    raw_comparators = payload.get("comparators")
-
-    if raw_comparators is None:
-        raw_comparators = default_specs if use_default_comparators else []
-    elif not isinstance(raw_comparators, list):
-        raise ApiError("comparators must be an array")
-
+    comparator_specs = resolve_comparator_specs(payload, default_specs)
     applied: list[str] = []
-    for spec in raw_comparators:
+    for spec in comparator_specs:
         comparator = build_comparator(spec)
         converter.register(comparator)
         if isinstance(spec, str):
@@ -374,6 +453,25 @@ def build_converter(
     return converter, applied_comparators, inputs
 
 
+def build_display_schema(
+    technical_schema: dict[str, Any],
+    payload: dict[str, Any],
+    *,
+    default_comparator_specs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    display_payload = dict(payload)
+    comparator_specs = resolve_comparator_specs(payload, default_comparator_specs)
+    display_payload["comparators"] = extend_display_schema_comparator_specs(comparator_specs)
+    display_payload["use_default_comparators"] = False
+
+    converter, _, _ = build_converter(
+        display_payload,
+        inputs_override=[("schema", technical_schema)],
+        default_comparator_specs=default_comparator_specs,
+    )
+    return converter.run()
+
+
 def build_postprocess_config(payload: dict[str, Any]) -> SchemaReferenceExtractionConfig:
     merge_base_of = normalize_text(payload.get("merge_base_of"), "anyOf")
     if merge_base_of not in SUPPORTED_BASE_OF:
@@ -397,7 +495,7 @@ def build_postprocess_config(payload: dict[str, Any]) -> SchemaReferenceExtracti
     return SchemaReferenceExtractionConfig(**config_kwargs)
 
 
-def read_graph_payload(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
+async def read_graph_payload(request: Request) -> dict[str, Any]:
     max_body_bytes_raw = os.environ.get("GENSCHEMA_MAX_BODY_BYTES")
     if max_body_bytes_raw is None:
         max_body_bytes = DEFAULT_MAX_BODY_BYTES
@@ -407,22 +505,25 @@ def read_graph_payload(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
         except ValueError as exc:
             raise ApiError("Invalid GENSCHEMA_MAX_BODY_BYTES") from exc
 
-    content_length_raw = handler.headers.get("Content-Length") or "0"
-    try:
-        content_length = int(content_length_raw)
-    except ValueError as exc:
-        raise ApiError("Invalid Content-Length") from exc
+    content_length_raw = request.headers.get("content-length")
+    if content_length_raw is not None:
+        try:
+            content_length = int(content_length_raw)
+        except ValueError as exc:
+            raise ApiError("Invalid Content-Length") from exc
+        if content_length < 0:
+            raise ApiError("Invalid Content-Length")
+        if content_length > max_body_bytes:
+            raise ApiError("Request body too large")
 
-    if content_length < 0:
-        raise ApiError("Invalid Content-Length")
-    if content_length > max_body_bytes:
+    body = await request.body()
+    if len(body) > max_body_bytes:
         raise ApiError("Request body too large")
-    if content_length == 0:
+    if not body:
         raise ApiError("Empty request body")
 
-    raw = handler.rfile.read(content_length).decode("utf-8")
     try:
-        payload = json.loads(raw)
+        payload = json.loads(body.decode("utf-8"))
     except json.JSONDecodeError as exc:
         raise ApiError("Invalid JSON") from exc
 
@@ -560,150 +661,6 @@ def build_similarity_graph(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-class GenschemaHandler(BaseHTTPRequestHandler):
-    server_version = "GenschemaRest/1.0"
-
-    def _path(self) -> str:
-        return urlparse(self.path).path.rstrip("/") or "/"
-
-    def _send_json(self, status: HTTPStatus, payload: Any) -> None:
-        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _send_error(self, status: HTTPStatus, message: str) -> None:
-        self._send_json(status, {"error": message})
-
-    def do_OPTIONS(self) -> None:  # noqa: N802
-        self.send_response(HTTPStatus.NO_CONTENT)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
-        self.send_header("Content-Length", "0")
-        self.end_headers()
-
-    def do_GET(self) -> None:  # noqa: N802
-        route = self._path()
-
-        if route == "/api/health":
-            self._send_json(
-                HTTPStatus.OK,
-                {
-                    "status": "ok",
-                    "service": SERVICE_NAME,
-                    "library": "genschema",
-                    "library_version": read_package_version(),
-                },
-            )
-            return
-
-        if route == "/api/genschema":
-            self._send_json(
-                HTTPStatus.OK,
-                {
-                    "service": SERVICE_NAME,
-                    "library": "genschema",
-                    "library_version": read_package_version(),
-                    "supported_base_of": list(SUPPORTED_BASE_OF),
-                    "default_comparators": DEFAULT_COMPARATOR_SPECS,
-                    "graph_defaults": {
-                        "route": SIMILARITY_GRAPH_ENDPOINT,
-                        "aliases": [SIMILARITY_GRAPH_ALIAS],
-                        "default_comparators": GRAPH_COMPARATOR_SPECS,
-                    },
-                    "endpoints": [
-                        "/api/health",
-                        "/api/genschema",
-                        "/api/genschema/postprocess",
-                        SIMILARITY_GRAPH_ENDPOINT,
-                        SIMILARITY_GRAPH_ALIAS,
-                    ],
-                },
-            )
-            return
-
-        self._send_error(HTTPStatus.NOT_FOUND, "Not found")
-
-    def do_POST(self) -> None:  # noqa: N802
-        route = self._path()
-
-        try:
-            payload = read_graph_payload(self)
-        except ApiError as exc:
-            self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
-            return
-
-        try:
-            if route in {"/api/genschema", "/api/genschema/convert"}:
-                converter, applied_comparators, inputs = build_converter(payload)
-                schema = converter.run()
-
-                postprocess_spec = payload.get("postprocess")
-                if is_record(postprocess_spec) and normalize_bool(postprocess_spec.get("enabled"), True):
-                    config = build_postprocess_config(postprocess_spec)
-                    schema = SchemaReferencePostprocessor.process(schema, config)
-
-                self._send_json(
-                    HTTPStatus.OK,
-                    {
-                        "schema": schema,
-                        "meta": {
-                            "inputs": len(inputs),
-                            "comparators": applied_comparators,
-                            "base_of": normalize_text(payload.get("base_of"), "anyOf"),
-                            "pseudo_array": normalize_bool(payload.get("pseudo_array"), True),
-                            "postprocessed": is_record(payload.get("postprocess"))
-                            and normalize_bool(payload["postprocess"].get("enabled"), True),
-                        },
-                    },
-                )
-                return
-
-            if route in {SIMILARITY_GRAPH_ENDPOINT, SIMILARITY_GRAPH_ALIAS}:
-                graph = build_similarity_graph(payload)
-                self._send_json(HTTPStatus.OK, graph)
-                return
-
-            if route == "/api/genschema/postprocess":
-                schema = payload.get("schema")
-                if not is_record(schema):
-                    raise ApiError("schema must be a JSON object")
-
-                config_payload = payload.get("config")
-                if config_payload is None:
-                    config_payload = payload
-                if not is_record(config_payload):
-                    raise ApiError("config must be a JSON object")
-
-                config = build_postprocess_config(config_payload)
-                result = SchemaReferencePostprocessor.process(schema, config)
-                self._send_json(HTTPStatus.OK, result)
-                return
-
-        except ApiError as exc:
-            self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
-            return
-        except Exception as exc:
-            self.send_response(HTTPStatus.INTERNAL_SERVER_ERROR)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            body = json.dumps({"error": "Failed to process genschema request", "detail": str(exc)}, ensure_ascii=False, indent=2)
-            self.wfile.write(body.encode("utf-8"))
-            return
-
-        self._send_error(HTTPStatus.NOT_FOUND, "Not found")
-
-    def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
-        print(f"{self.client_address[0]} - {self.log_date_time_string()} - {format % args}")
-
-
 def get_server_address() -> tuple[str, int]:
     host = os.environ.get("GENSCHEMA_HOST", DEFAULT_HOST)
     port_raw = os.environ.get("GENSCHEMA_PORT", str(DEFAULT_PORT))
@@ -714,17 +671,130 @@ def get_server_address() -> tuple[str, int]:
     return host, port
 
 
+def build_health_payload() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "service": SERVICE_NAME,
+        "library": "genschema",
+        "library_version": read_package_version(),
+    }
+
+
+def build_service_info_payload() -> dict[str, Any]:
+    return {
+        "service": SERVICE_NAME,
+        "library": "genschema",
+        "library_version": read_package_version(),
+        "supported_base_of": list(SUPPORTED_BASE_OF),
+        "default_comparators": DEFAULT_COMPARATOR_SPECS,
+        "graph_defaults": {
+            "route": SIMILARITY_GRAPH_ENDPOINT,
+            "aliases": [SIMILARITY_GRAPH_ALIAS],
+            "default_comparators": GRAPH_COMPARATOR_SPECS,
+        },
+        "endpoints": [
+            "/api/health",
+            "/api/genschema",
+            "/api/genschema/postprocess",
+            SIMILARITY_GRAPH_ENDPOINT,
+            SIMILARITY_GRAPH_ALIAS,
+        ],
+    }
+
+
+@app.get("/api/health")
+@app.get("/api/health/")
+async def health() -> dict[str, Any]:
+    return build_health_payload()
+
+
+@app.get("/api/genschema")
+@app.get("/api/genschema/")
+async def genschema_info() -> dict[str, Any]:
+    return build_service_info_payload()
+
+
+async def run_generate_schema(payload: dict[str, Any]) -> dict[str, Any]:
+    converter, applied_comparators, inputs = build_converter(payload)
+    schema = converter.run()
+
+    postprocess_spec = payload.get("postprocess")
+    if is_record(postprocess_spec) and normalize_bool(postprocess_spec.get("enabled"), True):
+        config = build_postprocess_config(postprocess_spec)
+        schema = SchemaReferencePostprocessor.process(schema, config)
+
+    display_schema = build_display_schema(
+        schema,
+        payload,
+        default_comparator_specs=DEFAULT_COMPARATOR_SPECS,
+    )
+
+    return {
+        "schema": schema,
+        "display_schema": display_schema,
+        "meta": {
+            "inputs": len(inputs),
+            "comparators": applied_comparators,
+            "base_of": normalize_text(payload.get("base_of"), "anyOf"),
+            "pseudo_array": normalize_bool(payload.get("pseudo_array"), True),
+            "postprocessed": is_record(payload.get("postprocess"))
+            and normalize_bool(payload["postprocess"].get("enabled"), True),
+        },
+    }
+
+
+@app.post("/api/genschema")
+@app.post("/api/genschema/")
+@app.post("/api/genschema/convert")
+@app.post("/api/genschema/convert/")
+async def generate_schema(request: Request) -> dict[str, Any]:
+    payload = await read_graph_payload(request)
+    return await run_generate_schema(payload)
+
+
+@app.post(SIMILARITY_GRAPH_ENDPOINT)
+@app.post(f"{SIMILARITY_GRAPH_ENDPOINT}/")
+@app.post(SIMILARITY_GRAPH_ALIAS)
+@app.post(f"{SIMILARITY_GRAPH_ALIAS}/")
+async def similarity_graph(request: Request) -> dict[str, Any]:
+    payload = await read_graph_payload(request)
+    return build_similarity_graph(payload)
+
+
+@app.post("/api/genschema/postprocess")
+@app.post("/api/genschema/postprocess/")
+async def postprocess_schema(request: Request) -> dict[str, Any]:
+    payload = await read_graph_payload(request)
+
+    schema = payload.get("schema")
+    if not is_record(schema):
+        raise ApiError("schema must be a JSON object")
+
+    config_payload = payload.get("config")
+    if config_payload is None:
+        config_payload = payload
+    if not is_record(config_payload):
+        raise ApiError("config must be a JSON object")
+
+    config = build_postprocess_config(config_payload)
+    result = SchemaReferencePostprocessor.process(schema, config)
+    display_schema = build_display_schema(
+        result,
+        {"use_default_comparators": True},
+        default_comparator_specs=DEFAULT_COMPARATOR_SPECS,
+    )
+    return {
+        "schema": result,
+        "display_schema": display_schema,
+    }
+
+
 def main() -> None:
     host, port = get_server_address()
-    server = ThreadingHTTPServer((host, port), GenschemaHandler)
-    print(f"{SERVICE_NAME} REST API listening on http://{host}:{port}")
+    import uvicorn
 
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
+    print(f"{SERVICE_NAME} REST API listening on http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":

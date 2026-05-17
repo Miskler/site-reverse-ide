@@ -89,6 +89,7 @@ export function buildSchemaGraph(schema: JsonSchema): SchemaGraphModel {
 export function getSelectionDetails(
   model: SchemaGraphModel,
   selection: SchemaSelection | null,
+  displaySchema?: JsonSchema | null,
 ): SelectionDetails | null {
   if (!selection) {
     return null;
@@ -105,6 +106,9 @@ export function getSelectionDetails(
     const ownerNode = model.nodeMap[node.ownerNodeId];
     const headingNode =
       node.isEmbedded || displayNode !== node ? ownerNode ?? node : displayNode;
+    const schema = displaySchema
+      ? getSchemaAtPointer(displaySchema, displayNode.pointer) ?? displayNode.schema
+      : displayNode.schema;
 
     return {
       heading: headingNode.title,
@@ -113,7 +117,7 @@ export function getSelectionDetails(
       facts: [displayNode.subtitle, ...displayNode.metaLines].filter(Boolean),
       schemaPointer: displayNode.pointer,
       jsonPointer: extractSourceJsonPointer(displayNode.schema),
-      schema: displayNode.schema,
+      schema,
     };
   }
 
@@ -124,6 +128,10 @@ export function getSelectionDetails(
   }
 
   const parent = model.nodeMap[selection.nodeId];
+  const schemaPointer = row.resolvedPointer ?? row.pointer;
+  const schema = displaySchema
+    ? getSchemaAtPointer(displaySchema, schemaPointer) ?? row.schema
+    : row.schema;
 
   return {
     heading: row.label,
@@ -134,9 +142,9 @@ export function getSelectionDetails(
       row.typeLabel,
       ...row.detailLines,
     ].filter((value): value is string => Boolean(value)),
-    schemaPointer: row.resolvedPointer ?? row.pointer,
+    schemaPointer,
     jsonPointer: extractSourceJsonPointer(row.schema),
-    schema: row.schema,
+    schema,
   };
 }
 

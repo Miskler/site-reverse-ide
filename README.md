@@ -29,7 +29,7 @@ Production UI:
 
 ## Python genschema API
 
-The Python server wraps the real [`genschema`](https://pypi.org/project/genschema/) package and exposes it over REST.
+The FastAPI Python server wraps the real [`genschema`](https://pypi.org/project/genschema/) package and exposes it over REST.
 
 Install dependencies:
 

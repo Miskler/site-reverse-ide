@@ -28,13 +28,21 @@ interface FocusNodeRequest {
   token: number;
 }
 
+interface GeneratedSchemaResponse {
+  schema?: unknown;
+  display_schema?: unknown;
+}
+
 interface SchemaViewerPageProps {
   nodeUid: string;
   jsonIndex: number | null;
 }
 
 const api = {
-  async generateSchema(documents: string[]): Promise<JsonSchema> {
+  async generateSchema(documents: string[]): Promise<{
+    technicalSchema: JsonSchema;
+    displaySchema: JsonSchema;
+  }> {
     const response = await fetch(buildGenschemaUrl('/api/genschema'), {
       method: 'POST',
       headers: {
@@ -52,18 +60,24 @@ const api = {
       throw new Error(payload.error || `Failed to generate schema (${response.status})`);
     }
 
-    const payload = (await response.json()) as { schema?: unknown };
+    const payload = (await response.json()) as GeneratedSchemaResponse;
     if (
       !payload ||
       typeof payload !== 'object' ||
       !payload.schema ||
       typeof payload.schema !== 'object' ||
-      Array.isArray(payload.schema)
+      Array.isArray(payload.schema) ||
+      !payload.display_schema ||
+      typeof payload.display_schema !== 'object' ||
+      Array.isArray(payload.display_schema)
     ) {
       throw new Error('Malformed schema response');
     }
 
-    return payload.schema as JsonSchema;
+    return {
+      technicalSchema: payload.schema as JsonSchema,
+      displaySchema: payload.display_schema as JsonSchema,
+    };
   },
 };
 
@@ -90,6 +104,7 @@ export function SchemaViewerPage({
   const [busy, setBusy] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [localJson, setLocalJson] = useState<string | null>(null);
+  const [displaySchema, setDisplaySchema] = useState<JsonSchema | null>(null);
   const [revision, setRevision] = useState(0);
   const [focusNodeRequest, setFocusNodeRequest] = useState<FocusNodeRequest | null>(null);
   const [isResizing, setIsResizing] = useState(false);
@@ -111,8 +126,8 @@ export function SchemaViewerPage({
   }, [jsonIndex, nodeUid]);
 
   const details = useMemo(
-    () => (graphModel ? getSelectionDetails(graphModel, selection) : null),
-    [graphModel, selection],
+    () => (graphModel ? getSelectionDetails(graphModel, selection, displaySchema) : null),
+    [displaySchema, graphModel, selection],
   );
 
   const shellStyle = useMemo<CSSProperties>(
@@ -360,7 +375,11 @@ export function SchemaViewerPage({
     }
   }
 
-  async function applySchemaDocument(schema: JsonSchema, request: number) {
+  async function applySchemaDocument(
+    schema: JsonSchema,
+    displaySchemaDocument: JsonSchema,
+    request: number,
+  ) {
     const validation = validateSchemaDocument(schema);
 
     if (!validation.valid) {
@@ -386,6 +405,7 @@ export function SchemaViewerPage({
 
       startTransition(() => {
         setGraphModel(model);
+        setDisplaySchema(displaySchemaDocument);
         setPositions(nextPositions);
         setSelection(null);
         setFocusNodeRequest(null);
@@ -421,6 +441,7 @@ export function SchemaViewerPage({
     setBusy(true);
     setLoadError(null);
     setLocalJson(null);
+    setDisplaySchema(null);
     setGraphModel(null);
     setPositions({});
     setSelection(null);
@@ -458,13 +479,13 @@ export function SchemaViewerPage({
         return;
       }
 
-      const schema = await api.generateSchema(documents);
+      const { technicalSchema, displaySchema: nextDisplaySchema } = await api.generateSchema(documents);
 
       if (request !== requestCounter.current) {
         return;
       }
 
-      await applySchemaDocument(schema, request);
+      await applySchemaDocument(technicalSchema, nextDisplaySchema, request);
     } catch (error) {
       if (request !== requestCounter.current) {
         return;
